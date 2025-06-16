@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, date
 from typing import Any
 
 import voluptuous as vol
@@ -11,9 +12,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_DEVICE_ID,
+    CONF_LAST_MAINTENANCE,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
     DEFAULT_MAINTENANCE_INTERVAL,
@@ -48,6 +51,7 @@ def _get_step_user_schema(hass: HomeAssistant) -> vol.Schema:
         {
             vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
             vol.Required(CONF_MAINTENANCE_INTERVAL, default=DEFAULT_MAINTENANCE_INTERVAL): int,
+            vol.Optional(CONF_LAST_MAINTENANCE): cv.date,
             vol.Optional(CONF_DEVICE_ID, default=""): vol.In(device_options),
         }
     )

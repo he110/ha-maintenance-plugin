@@ -4,10 +4,10 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/user/maintainable",
+  "documentation": "https://github.com/he110/ha-maintenance-plugin",
   "integration_type": "device",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/he110/ha-maintenance-plugin/issues",
   "requirements": [],
-  "version": "1.0.0",
-  "issue_tracker": "https://github.com/user/maintainable/issues"
+  "version": "1.0.0"
 } 

@@ -47,8 +47,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     # Устанавливаем флаг для создания глобальных сенсоров
-    if not hasattr(hass.data[DOMAIN], '_global_sensors_created'):
-        hass.data[DOMAIN]._global_sensors_created = False
+    if '_global_sensors_created' not in hass.data[DOMAIN]:
+        hass.data[DOMAIN]['_global_sensors_created'] = False
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

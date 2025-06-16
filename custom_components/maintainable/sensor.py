@@ -11,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import MaintainableEntity
-from . import template_sensor
 
 
 async def async_setup_entry(
@@ -30,16 +29,6 @@ async def async_setup_entry(
     ]
     
     async_add_entities(entities)
-    
-    # Настраиваем template сенсоры подсчета только для первой записи
-    # Проверяем, сколько записей интеграции уже существует
-    maintainable_entries = [
-        entry for entry in hass.config_entries.async_entries(DOMAIN)
-    ]
-    
-    # Создаем template сенсоры только для первой записи
-    if len(maintainable_entries) == 1 or config_entry == maintainable_entries[0]:
-        await template_sensor.async_setup_entry(hass, config_entry, async_add_entities)
 
 
 class MaintainableStatusSensor(MaintainableEntity, SensorEntity):

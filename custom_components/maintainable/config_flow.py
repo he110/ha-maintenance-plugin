@@ -16,16 +16,12 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
-    CONF_UPDATE_INTERVAL,
     CONF_ENABLE_NOTIFICATIONS,
     DEFAULT_MAINTENANCE_INTERVAL,
     DEFAULT_NAME,
-    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MIN_MAINTENANCE_INTERVAL,
     MAX_MAINTENANCE_INTERVAL,
-    MIN_UPDATE_INTERVAL,
-    MAX_UPDATE_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,10 +67,6 @@ def _get_step_options_schema() -> vol.Schema:
     """Получить схему для дополнительных опций."""
     return vol.Schema(
         {
-            vol.Optional(
-                CONF_UPDATE_INTERVAL, 
-                default=DEFAULT_UPDATE_INTERVAL
-            ): vol.All(int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)),
             vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=True): bool,
         }
     )
@@ -106,7 +98,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         else:
             # Добавляем значения по умолчанию для дополнительных опций
-            user_input.setdefault(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
             user_input.setdefault(CONF_ENABLE_NOTIFICATIONS, True)
             
             return self.async_create_entry(title=info["title"], data=user_input)
@@ -151,10 +142,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             )
 
         # Получаем текущие значения из конфигурации или опций
-        current_update_interval = (
-            self.config_entry.options.get(CONF_UPDATE_INTERVAL) or
-            self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        )
         current_notifications = (
             self.config_entry.options.get(CONF_ENABLE_NOTIFICATIONS) or
             self.config_entry.data.get(CONF_ENABLE_NOTIFICATIONS, True)
@@ -164,10 +151,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(
-                        CONF_UPDATE_INTERVAL, 
-                        default=current_update_interval
-                    ): vol.All(int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)),
                     vol.Optional(
                         CONF_ENABLE_NOTIFICATIONS, 
                         default=current_notifications
@@ -207,14 +190,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
 async def validate_options(data: dict[str, Any]) -> None:
     """Валидация опций."""
-    # Валидация интервала обновления
-    update_interval = data.get(CONF_UPDATE_INTERVAL)
-    if update_interval is not None:
-        if not isinstance(update_interval, int) or update_interval < MIN_UPDATE_INTERVAL or update_interval > MAX_UPDATE_INTERVAL:
-            raise ValueError(
-                f"Интервал обновления должен быть от {MIN_UPDATE_INTERVAL} до {MAX_UPDATE_INTERVAL} минут"
-            )
-
     # Валидация уведомлений
     notifications = data.get(CONF_ENABLE_NOTIFICATIONS)
     if notifications is not None and not isinstance(notifications, bool):

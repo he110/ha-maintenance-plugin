@@ -1,7 +1,7 @@
 """Базовая сущность для интеграции Maintainable."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from typing import Any
 import asyncio
 import logging
@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_change
 
 from .const import (
     ATTR_DAYS_REMAINING,
@@ -22,10 +22,8 @@ from .const import (
     CONF_LAST_MAINTENANCE,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
-    CONF_UPDATE_INTERVAL,
     CONF_ENABLE_NOTIFICATIONS,
     DEFAULT_ICON,
-    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     EVENT_MAINTENANCE_OVERDUE,
     EVENT_MAINTENANCE_DUE,
@@ -51,10 +49,6 @@ class MaintainableEntity(RestoreEntity):
         
         # Получаем настройки из опций или конфигурации
         self._options = options or {}
-        self._update_interval = (
-            self._options.get(CONF_UPDATE_INTERVAL) or
-            config.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        )
         self._enable_notifications = (
             self._options.get(CONF_ENABLE_NOTIFICATIONS) or
             config.get(CONF_ENABLE_NOTIFICATIONS, True)
@@ -83,15 +77,7 @@ class MaintainableEntity(RestoreEntity):
     def update_options(self, options: dict[str, Any]) -> None:
         """Обновление опций сущности."""
         self._options = options
-        old_update_interval = self._update_interval
-        
-        self._update_interval = options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         self._enable_notifications = options.get(CONF_ENABLE_NOTIFICATIONS, True)
-        
-        # Если интервал обновления изменился, перенастраиваем таймер
-        if old_update_interval != self._update_interval and self._update_timer:
-            self._update_timer()  # Отменяем старый таймер
-            self._setup_auto_update()  # Создаем новый
 
     @property
     def device_info(self) -> DeviceInfo | None:
@@ -218,8 +204,8 @@ class MaintainableEntity(RestoreEntity):
         # Инициализируем последний статус
         self._last_status = self._get_status()
 
-        # Настраиваем автоматическое обновление
-        self._setup_auto_update()
+        # Настраиваем автоматическое обновление в полночь
+        self._setup_daily_update()
 
     async def async_will_remove_from_hass(self) -> None:
         """Вызывается при удалении сущности из Home Assistant."""
@@ -242,17 +228,19 @@ class MaintainableEntity(RestoreEntity):
         
         await super().async_will_remove_from_hass()
 
-    def _setup_auto_update(self) -> None:
-        """Настройка автоматического обновления состояния."""
-        # Используем конфигурируемый интервал обновления
-        self._update_timer = async_track_time_interval(
+    def _setup_daily_update(self) -> None:
+        """Настройка автоматического обновления каждый день в полночь."""
+        # Обновляем каждый день в 00:01 (чуть после полуночи)
+        self._update_timer = async_track_time_change(
             self.hass,
-            self._async_auto_update,
-            timedelta(minutes=self._update_interval)
+            self._async_daily_update,
+            hour=0,
+            minute=1,
+            second=0
         )
 
-    async def _async_auto_update(self, now: datetime) -> None:
-        """Автоматическое обновление состояния."""
+    async def _async_daily_update(self, now: datetime) -> None:
+        """Ежедневное обновление состояния в полночь."""
         try:
             old_status = self._last_status
             current_status = self._get_status()
@@ -262,9 +250,9 @@ class MaintainableEntity(RestoreEntity):
             self._last_status = current_status
             
             self.async_write_ha_state()
-            _LOGGER.debug(f"Auto-updated {self.entity_id}, status: {current_status}")
+            _LOGGER.debug(f"Daily update for {self.entity_id}, status: {current_status}")
         except Exception as e:
-            _LOGGER.error(f"Error during auto-update of {self.entity_id}: {e}")
+            _LOGGER.error(f"Error during daily update of {self.entity_id}: {e}")
 
     def perform_maintenance(self) -> None:
         """Выполнить обслуживание - обновить дату последнего обслуживания."""

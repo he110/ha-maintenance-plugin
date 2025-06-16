@@ -3,17 +3,17 @@
     "step": {
       "user": {
         "title": "Setup Maintainable Component",
-        "description": "Enter information about the component that requires periodic maintenance",
+        "description": "Enter information about a component that requires regular maintenance",
         "data": {
-          "name": "Component Name",
-          "maintenance_interval": "Maintenance Interval (days)",
-          "device_id": "Device (optional)"
+          "name": "Component name",
+          "maintenance_interval": "Maintenance interval (days)",
+          "device_id": "Link to device (optional)"
         }
       }
     },
     "error": {
-      "invalid_input": "Invalid input data. Please check the entered values.",
-      "unknown": "Unexpected error"
+      "invalid_input": "Invalid input data",
+      "unknown": "Unknown error"
     },
     "abort": {
       "already_configured": "Component is already configured"
@@ -22,17 +22,16 @@
   "options": {
     "step": {
       "init": {
-        "title": "Additional Settings",
-        "description": "Configure additional parameters for the maintainable component",
+        "title": "Advanced Settings",
+        "description": "Configure additional integration parameters",
         "data": {
-          "update_interval": "Update Interval (minutes)",
           "enable_notifications": "Enable event notifications"
         }
       }
     },
     "error": {
-      "invalid_options": "Invalid settings. Please check the entered values.",
-      "unknown": "Unexpected error"
+      "invalid_options": "Invalid settings",
+      "unknown": "Unknown error"
     }
   },
   "entity": {
@@ -56,8 +55,11 @@
       }
     },
     "button": {
-      "maintenance_perform": {
+      "perform_maintenance": {
         "name": "Perform Maintenance"
+      },
+      "set_maintenance_date": {
+        "name": "Set Maintenance Date"
       }
     }
   },
@@ -76,15 +78,11 @@
     },
     "set_last_maintenance": {
       "name": "Set Last Maintenance Date",
-      "description": "Sets the last maintenance date for the specified component",
+      "description": "Set the last maintenance date for specified components",
       "fields": {
-        "entity_id": {
-          "name": "Entity",
-          "description": "Entity ID of the maintainable component"
-        },
-        "date": {
-          "name": "Date",
-          "description": "Date of last maintenance"
+        "maintenance_date": {
+          "name": "Maintenance Date",
+          "description": "Date when maintenance was performed"
         }
       }
     }

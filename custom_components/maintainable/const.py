@@ -10,16 +10,12 @@ CONF_NAME = "name"
 CONF_LAST_MAINTENANCE = "last_maintenance"
 CONF_MAINTENANCE_INTERVAL = "maintenance_interval"
 CONF_DEVICE_ID = "device_id"
-CONF_UPDATE_INTERVAL = "update_interval"
 CONF_ENABLE_NOTIFICATIONS = "enable_notifications"
 
 # Значения по умолчанию
 DEFAULT_NAME = "Обслуживаемый компонент"
 DEFAULT_MAINTENANCE_INTERVAL = 30  # дни
 DEFAULT_SCAN_INTERVAL = timedelta(hours=1)
-DEFAULT_UPDATE_INTERVAL = 30  # минуты
-MIN_UPDATE_INTERVAL = 5  # минимум 5 минут
-MAX_UPDATE_INTERVAL = 1440  # максимум 24 часа
 
 # Ограничения валидации
 MIN_MAINTENANCE_INTERVAL = 1  # минимум 1 день

@@ -163,4 +163,26 @@ class MaintainableEntity(RestoreEntity):
                 if entity != self:  # Не уведомляем себя
                     # Обновляем данные связанной сущности
                     entity._last_maintenance = self._last_maintenance
+                    entity.async_write_ha_state()
+
+    async def set_last_maintenance(self, maintenance_date: date) -> None:
+        """Установить дату последнего обслуживания."""
+        # Конвертируем date в datetime с текущим временем
+        if isinstance(maintenance_date, date):
+            self._last_maintenance = datetime.combine(
+                maintenance_date, 
+                datetime.min.time()
+            ).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        else:
+            self._last_maintenance = maintenance_date
+            
+        self.async_write_ha_state()
+        
+        # Уведомляем все связанные сущности об изменении
+        if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
+            entities = self.hass.data[DOMAIN][self._entry_id]["entities"]
+            for entity_id, entity in entities.items():
+                if entity != self:  # Не уведомляем себя
+                    # Обновляем данные связанной сущности
+                    entity._last_maintenance = self._last_maintenance
                     entity.async_write_ha_state() 

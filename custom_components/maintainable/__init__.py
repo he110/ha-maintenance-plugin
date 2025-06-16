@@ -26,6 +26,13 @@ SCAN_INTERVAL = timedelta(minutes=1)
 SERVICE_GET_OVERDUE_ITEMS = "get_overdue_items"
 SERVICE_GET_DUE_ITEMS = "get_due_items"
 SERVICE_GET_ALL_ITEMS = "get_all_items"
+SERVICE_SET_LAST_MAINTENANCE = "set_last_maintenance"
+
+# Схема для service set_last_maintenance
+SERVICE_SET_LAST_MAINTENANCE_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("date"): cv.date,
+})
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -55,6 +62,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_GET_OVERDUE_ITEMS)
             hass.services.async_remove(DOMAIN, SERVICE_GET_DUE_ITEMS) 
             hass.services.async_remove(DOMAIN, SERVICE_GET_ALL_ITEMS)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_LAST_MAINTENANCE)
 
     return unload_ok
 
@@ -135,6 +143,33 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         
         return {"items": items}
 
+    async def async_set_last_maintenance(call: ServiceCall) -> None:
+        """Service для установки даты последнего обслуживания."""
+        entity_id = call.data["entity_id"]
+        new_date = call.data["date"]
+        
+        # Ищем сущность по entity_id
+        target_entity = None
+        for entry_id, entry_data in hass.data[DOMAIN].items():
+            if isinstance(entry_data, dict) and "entities" in entry_data:
+                for stored_entity_id, entity in entry_data["entities"].items():
+                    if stored_entity_id == entity_id:
+                        target_entity = entity
+                        break
+                if target_entity:
+                    break
+        
+        if not target_entity:
+            _LOGGER.error(f"Entity {entity_id} not found")
+            return
+        
+        # Устанавливаем новую дату последнего обслуживания
+        if hasattr(target_entity, 'set_last_maintenance'):
+            await target_entity.set_last_maintenance(new_date)
+            _LOGGER.info(f"Set last maintenance date for {entity_id} to {new_date}")
+        else:
+            _LOGGER.error(f"Entity {entity_id} does not support setting maintenance date")
+
     # Регистрируем services только если они еще не зарегистрированы
     if not hass.services.has_service(DOMAIN, SERVICE_GET_OVERDUE_ITEMS):
         hass.services.async_register(
@@ -158,6 +193,14 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
             SERVICE_GET_ALL_ITEMS,
             async_get_all_items,
             supports_response=SupportsResponse.ONLY,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_LAST_MAINTENANCE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_LAST_MAINTENANCE,
+            async_set_last_maintenance,
+            schema=SERVICE_SET_LAST_MAINTENANCE_SCHEMA,
         )
 
 

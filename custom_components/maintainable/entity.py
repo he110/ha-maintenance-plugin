@@ -66,16 +66,14 @@ class MaintainableEntity(RestoreEntity):
             else:
                 self._last_maintenance = last_maintenance_date
         else:
-            # Если дата не указана, устанавливаем текущую дату
-            # Это означает что обслуживание только что было выполнено
-            self._last_maintenance = dt_util.now()
+            # Если дата не указана, используем None - будет восстановлена из состояния
+            self._last_maintenance = None
         
         # Инициализируем статус сразу
         self._last_status = self._get_status()
         
-        # Создаем уникальный ID на основе entry_id для избежания конфликтов
-        # Используем только entry_id для стабильности
-        self._attr_unique_id = f"{DOMAIN}_{entry_id}"
+        # Создаем уникальный ID на основе имени и entry_id для избежания конфликтов
+        self._attr_unique_id = f"{DOMAIN}_{entry_id}_{self._attr_name.lower().replace(' ', '_')}"
 
     def update_options(self, options: dict[str, Any]) -> None:
         """Обновление опций сущности."""
@@ -189,22 +187,29 @@ class MaintainableEntity(RestoreEntity):
             async with entities_dict._lock:
                 entities_dict[self.entity_id] = self
         
-        # Восстанавливаем состояние из хранилища только если не было установлено при создании
+        # Восстанавливаем состояние из хранилища
         if (state := await self.async_get_last_state()) is not None:
             if last_maintenance_str := state.attributes.get(ATTR_LAST_MAINTENANCE):
                 try:
                     restored_date = datetime.fromisoformat(
                         last_maintenance_str.replace("Z", "+00:00")
                     )
-                    # Используем восстановленную дату только если она не была задана при создании
-                    # и если восстановленная дата более поздняя
-                    if self._last_maintenance and restored_date > self._last_maintenance:
+                    # Если дата не была установлена при создании, используем восстановленную
+                    if not self._last_maintenance:
                         self._last_maintenance = restored_date
-                        # Обновляем статус после восстановления даты
-                        self._last_status = self._get_status()
+                    # Если была установлена, используем более позднюю
+                    elif restored_date > self._last_maintenance:
+                        self._last_maintenance = restored_date
+                    # Обновляем статус после восстановления даты
+                    self._last_status = self._get_status()
                 except ValueError:
-                    # Если не можем распарсить дату, оставляем текущую
-                    pass
+                    # Если не можем распарсить дату, используем дату создания или текущую
+                    if not self._last_maintenance:
+                        self._last_maintenance = dt_util.now()
+        else:
+            # Если нет сохраненного состояния и не было установлено при создании
+            if not self._last_maintenance:
+                self._last_maintenance = dt_util.now()
 
         # Настраиваем автоматическое обновление в полночь
         self._setup_daily_update()

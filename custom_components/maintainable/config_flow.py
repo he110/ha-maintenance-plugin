@@ -17,7 +17,6 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
-    CONF_LAST_MAINTENANCE,
     CONF_ENABLE_NOTIFICATIONS,
     DEFAULT_MAINTENANCE_INTERVAL,
     DEFAULT_NAME,
@@ -101,9 +100,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         else:
             # Добавляем значения по умолчанию для дополнительных опций
             user_input.setdefault(CONF_ENABLE_NOTIFICATIONS, True)
-            
-            # Устанавливаем текущую дату как дату последнего обслуживания для новых записей
-            user_input.setdefault(CONF_LAST_MAINTENANCE, dt_util.now().date())
             
             return self.async_create_entry(title=info["title"], data=user_input)
 

@@ -53,6 +53,14 @@
       }
     }
   },
+  "entity_component": {
+    "_": {
+      "name": {
+        "maintenance_overdue_count": "Количество просроченных компонентов",
+        "maintenance_due_count": "Количество компонентов требующих обслуживания"
+      }
+    }
+  },
   "services": {
     "get_overdue_items": {
       "name": "Получить просроченные компоненты",

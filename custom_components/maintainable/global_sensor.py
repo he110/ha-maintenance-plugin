@@ -1,0 +1,139 @@
+"""Глобальные сенсоры для подсчета компонентов обслуживания."""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
+
+from .const import DOMAIN, STATE_OVERDUE, STATE_DUE, STATE_OK
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Настройка глобальных сенсоров подсчета."""
+    # Создаем глобальные сенсоры только для первой записи интеграции
+    # Проверяем, есть ли уже глобальные сенсоры
+    existing_entities = []
+    for entity_id in hass.states.async_entity_ids("sensor"):
+        if entity_id in ["sensor.maintenance_overdue_count", "sensor.maintenance_due_count"]:
+            existing_entities.append(entity_id)
+    
+    # Если глобальные сенсоры уже существуют, не создаем их повторно
+    if existing_entities:
+        _LOGGER.debug("Global maintenance sensors already exist, skipping creation")
+        return
+    
+    entities = [
+        MaintenanceOverdueCountSensor(hass),
+        MaintenanceDueCountSensor(hass),
+    ]
+    
+    async_add_entities(entities)
+
+
+class MaintenanceCountSensor(SensorEntity):
+    """Базовый класс для сенсоров подсчета компонентов обслуживания."""
+
+    def __init__(self, hass: HomeAssistant, status_filter: str) -> None:
+        """Инициализация сенсора подсчета."""
+        self.hass = hass
+        self._status_filter = status_filter
+        self._attr_state_class = None
+        self._attr_native_unit_of_measurement = None
+        self._attr_icon = "mdi:wrench"
+        self._attr_should_poll = False
+        
+        # Подписываемся на изменения всех сенсоров статуса
+        async_track_state_change_event(
+            hass, None, self._handle_state_change
+        )
+
+    @callback
+    def _handle_state_change(self, event) -> None:
+        """Обработка изменения состояния сенсоров."""
+        entity_id = event.data.get("entity_id")
+        if entity_id and entity_id.endswith("_status") and entity_id.startswith("sensor."):
+            self.async_schedule_update_ha_state()
+
+    def _get_matching_entities(self) -> list[dict[str, Any]]:
+        """Получить список сущностей, соответствующих фильтру."""
+        matching_entities = []
+        
+        for entity_id in self.hass.states.async_entity_ids("sensor"):
+            if entity_id.endswith("_status"):
+                state = self.hass.states.get(entity_id)
+                if state and state.attributes.get("status") == self._status_filter:
+                    matching_entities.append({
+                        "entity_id": entity_id,
+                        "name": state.name or entity_id,
+                        "status": state.attributes.get("status"),
+                        "days_remaining": state.attributes.get("days_remaining"),
+                        "last_maintenance": state.attributes.get("last_maintenance"),
+                        "next_maintenance": state.attributes.get("next_maintenance"),
+                        "maintenance_interval": state.attributes.get("maintenance_interval"),
+                    })
+        
+        return matching_entities
+
+    @property
+    def native_value(self) -> int:
+        """Возвращает количество компонентов."""
+        return len(self._get_matching_entities())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Дополнительные атрибуты состояния."""
+        entities = self._get_matching_entities()
+        return {
+            "items": [entity["name"] for entity in entities],
+            "entity_ids": [entity["entity_id"] for entity in entities],
+            "details": entities,
+        }
+
+
+class MaintenanceOverdueCountSensor(MaintenanceCountSensor):
+    """Сенсор подсчета просроченных компонентов обслуживания."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Инициализация сенсора просроченных компонентов."""
+        super().__init__(hass, STATE_OVERDUE)
+        self._attr_name = "Maintenance Overdue Count"
+        self._attr_unique_id = f"{DOMAIN}_overdue_count"
+        self._attr_icon = "mdi:alert-circle"
+
+    @property
+    def icon(self) -> str:
+        """Иконка сенсора в зависимости от значения."""
+        count = self.native_value
+        if count > 0:
+            return "mdi:alert-circle"
+        return "mdi:check-circle"
+
+
+class MaintenanceDueCountSensor(MaintenanceCountSensor):
+    """Сенсор подсчета компонентов, требующих обслуживания."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Инициализация сенсора компонентов требующих обслуживания."""
+        super().__init__(hass, STATE_DUE)
+        self._attr_name = "Maintenance Due Count"
+        self._attr_unique_id = f"{DOMAIN}_due_count"
+        self._attr_icon = "mdi:clock-alert"
+
+    @property
+    def icon(self) -> str:
+        """Иконка сенсора в зависимости от значения."""
+        count = self.native_value
+        if count > 0:
+            return "mdi:clock-alert"
+        return "mdi:check-circle" 

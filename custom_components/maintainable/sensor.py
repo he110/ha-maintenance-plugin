@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import MaintainableEntity
+from . import global_sensor
 
 
 async def async_setup_entry(
@@ -28,6 +29,9 @@ async def async_setup_entry(
     ]
     
     async_add_entities(entities)
+    
+    # Также настраиваем глобальные сенсоры подсчета
+    await global_sensor.async_setup_entry(hass, config_entry, async_add_entities)
 
 
 class MaintainableStatusSensor(MaintainableEntity, SensorEntity):

@@ -40,6 +40,13 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
         self._attr_unique_id = f"{self._attr_unique_id}_button"
         _LOGGER.info(f"Initialized button with unique_id: {self._attr_unique_id}")
 
+    async def async_added_to_hass(self) -> None:
+        """Вызывается при добавлении кнопки в Home Assistant."""
+        await super().async_added_to_hass()
+        # Немедленно записываем состояние чтобы кнопка стала доступной
+        self.async_write_ha_state()
+        _LOGGER.info(f"Button {self.entity_id} added to HA and state written")
+
     @property
     def available(self) -> bool:
         """Кнопка всегда доступна."""
@@ -59,8 +66,16 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
         """Обработка нажатия кнопки."""
         try:
             _LOGGER.info("Выполнение обслуживания для %s", self.name)
-            # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
-            self.perform_maintenance()
-            _LOGGER.info("Обслуживание выполнено успешно для %s", self.name)
+            _LOGGER.debug(f"Button entity_id: {self.entity_id}")
+            _LOGGER.debug(f"Button unique_id: {self.unique_id}")
+            _LOGGER.debug(f"Button available: {self.available}")
+            
+            # Проверяем что метод доступен
+            if hasattr(self, 'perform_maintenance') and callable(getattr(self, 'perform_maintenance')):
+                # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
+                self.perform_maintenance()
+                _LOGGER.info("Обслуживание выполнено успешно для %s", self.name)
+            else:
+                _LOGGER.error("Метод perform_maintenance недоступен для %s", self.name)
         except Exception as e:
             _LOGGER.error("Ошибка при выполнении обслуживания для %s: %s", self.name, e) 

@@ -70,6 +70,9 @@ class MaintainableEntity(RestoreEntity):
             # Это означает что обслуживание только что было выполнено
             self._last_maintenance = dt_util.now()
         
+        # Инициализируем статус сразу
+        self._last_status = self._get_status()
+        
         # Создаем уникальный ID на основе entry_id для избежания конфликтов
         # Используем только entry_id для стабильности
         self._attr_unique_id = f"{DOMAIN}_{entry_id}"
@@ -197,15 +200,17 @@ class MaintainableEntity(RestoreEntity):
                     # и если восстановленная дата более поздняя
                     if self._last_maintenance and restored_date > self._last_maintenance:
                         self._last_maintenance = restored_date
+                        # Обновляем статус после восстановления даты
+                        self._last_status = self._get_status()
                 except ValueError:
                     # Если не можем распарсить дату, оставляем текущую
                     pass
 
-        # Инициализируем последний статус
-        self._last_status = self._get_status()
-
         # Настраиваем автоматическое обновление в полночь
         self._setup_daily_update()
+        
+        # Немедленно записываем состояние чтобы сущность стала доступной
+        self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         """Вызывается при удалении сущности из Home Assistant."""
@@ -334,4 +339,9 @@ class MaintainableEntity(RestoreEntity):
         self.async_write_ha_state()
         
         # Уведомляем все связанные сущности об изменении
-        await self._async_notify_related_entities() 
+        await self._async_notify_related_entities()
+
+    @property
+    def available(self) -> bool:
+        """Сущность всегда доступна если инициализирована."""
+        return self._last_maintenance is not None 

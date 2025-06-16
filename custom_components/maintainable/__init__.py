@@ -59,6 +59,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+def _is_status_sensor(entity_id: str) -> bool:
+    """Проверяет, является ли сущность основным сенсором статуса."""
+    return entity_id.endswith("_status")
+
+
 async def _async_setup_services(hass: HomeAssistant) -> None:
     """Настройка services для интеграции."""
     
@@ -69,7 +74,10 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         for entry_id, entry_data in hass.data[DOMAIN].items():
             if isinstance(entry_data, dict) and "entities" in entry_data:
                 for entity_id, entity in entry_data["entities"].items():
-                    if hasattr(entity, '_get_status') and entity._get_status() == STATE_OVERDUE:
+                    # Возвращаем только основные сенсоры статуса
+                    if (_is_status_sensor(entity_id) and 
+                        hasattr(entity, '_get_status') and 
+                        entity._get_status() == STATE_OVERDUE):
                         items.append({
                             "entity_id": entity_id,
                             "name": entity.name,
@@ -89,7 +97,10 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         for entry_id, entry_data in hass.data[DOMAIN].items():
             if isinstance(entry_data, dict) and "entities" in entry_data:
                 for entity_id, entity in entry_data["entities"].items():
-                    if hasattr(entity, '_get_status') and entity._get_status() == STATE_DUE:
+                    # Возвращаем только основные сенсоры статуса
+                    if (_is_status_sensor(entity_id) and 
+                        hasattr(entity, '_get_status') and 
+                        entity._get_status() == STATE_DUE):
                         items.append({
                             "entity_id": entity_id,
                             "name": entity.name,
@@ -109,7 +120,9 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         for entry_id, entry_data in hass.data[DOMAIN].items():
             if isinstance(entry_data, dict) and "entities" in entry_data:
                 for entity_id, entity in entry_data["entities"].items():
-                    if hasattr(entity, '_get_status'):
+                    # Возвращаем только основные сенсоры статуса
+                    if (_is_status_sensor(entity_id) and 
+                        hasattr(entity, '_get_status')):
                         items.append({
                             "entity_id": entity_id,
                             "name": entity.name,
@@ -149,6 +162,6 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Перезагрузка интеграции."""
+    """Перезагрузка конфигурационной записи."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry) 

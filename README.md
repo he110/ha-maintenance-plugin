@@ -15,11 +15,17 @@ The **Maintainable** integration allows you to easily track objects that need pe
 ## Features
 
 - **Maintenance tracking** - Set maintenance intervals in days
-- **Automatic status updates** - OK, Due, Overdue
+- **Automatic status updates** - OK, Due, Overdue with automatic daily recalculation
 - **One-click maintenance** - Simple button to update maintenance date
 - **Persistent state** - Data persists across Home Assistant restarts
 - **Device linking** - Attach to existing devices in your system
 - **Initial date setup** - Set when components were last serviced
+- **Event system** - Automatic events for status changes and maintenance completion
+- **Configurable updates** - Customizable auto-update intervals (5 minutes to 24 hours)
+- **Smart notifications** - Optional event notifications with automation support
+- **Advanced validation** - Comprehensive data validation and error handling
+- **Built-in services** - Get lists of components by status for automations
+- **Global counters** - Built-in sensors showing total overdue/due components
 - **Multi-language support** - English and Russian localization
 
 ## Installation
@@ -63,6 +69,16 @@ The **Maintainable** integration allows you to easily track objects that need pe
 - **OK** - Maintenance not needed (more than 7 days remaining)
 - **DUE** - Maintenance needed soon (7 days or less)
 - **OVERDUE** - Maintenance is overdue
+
+## Events and Automation
+
+The integration automatically fires events that can be used in automations:
+
+- `maintainable_overdue` - When a component becomes overdue
+- `maintainable_due` - When a component needs maintenance soon
+- `maintainable_completed` - When maintenance is performed
+
+See [EVENTS.md](EVENTS.md) for detailed documentation and automation examples.
 
 ## ⚠️ Important Notes
 

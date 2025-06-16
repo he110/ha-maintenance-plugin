@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, date
 from typing import Any
+import asyncio
+import logging
 
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     ATTR_DAYS_REMAINING,
@@ -19,32 +22,52 @@ from .const import (
     CONF_LAST_MAINTENANCE,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
+    CONF_UPDATE_INTERVAL,
+    CONF_ENABLE_NOTIFICATIONS,
     DEFAULT_ICON,
+    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    EVENT_MAINTENANCE_OVERDUE,
+    EVENT_MAINTENANCE_DUE,
+    EVENT_MAINTENANCE_COMPLETED,
     STATE_DUE,
     STATE_OK,
     STATE_OVERDUE,
 )
 
+_LOGGER = logging.getLogger(__name__)
 
 class MaintainableEntity(RestoreEntity):
     """Базовая сущность для обслуживаемых компонентов."""
 
-    def __init__(self, config: dict[str, Any], entry_id: str) -> None:
+    def __init__(self, config: dict[str, Any], entry_id: str, options: dict[str, Any] | None = None) -> None:
         """Инициализация сущности обслуживаемого компонента."""
         self._attr_name = config[CONF_NAME]
         self._maintenance_interval = config[CONF_MAINTENANCE_INTERVAL]
         self._device_id = config.get(CONF_DEVICE_ID)
         self._entry_id = entry_id
+        self._update_timer = None
+        self._last_status = None  # Для отслеживания изменений статуса
+        
+        # Получаем настройки из опций или конфигурации
+        self._options = options or {}
+        self._update_interval = (
+            self._options.get(CONF_UPDATE_INTERVAL) or
+            config.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        )
+        self._enable_notifications = (
+            self._options.get(CONF_ENABLE_NOTIFICATIONS) or
+            config.get(CONF_ENABLE_NOTIFICATIONS, True)
+        )
         
         # Инициализируем дату последнего обслуживания
         last_maintenance_date = config.get(CONF_LAST_MAINTENANCE)
         if last_maintenance_date:
-            # Конвертируем date в datetime
+            # Конвертируем date в datetime с полуднем для избежания проблем с часовыми поясами
             if isinstance(last_maintenance_date, date):
                 self._last_maintenance = datetime.combine(
                     last_maintenance_date, 
-                    datetime.min.time()
+                    datetime.min.time().replace(hour=12)  # Используем полдень вместо полуночи
                 ).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
             else:
                 self._last_maintenance = last_maintenance_date
@@ -56,6 +79,19 @@ class MaintainableEntity(RestoreEntity):
         # Создаем уникальный ID на основе entry_id для избежания конфликтов
         clean_name = self._attr_name.lower().replace(' ', '_').replace('-', '_')
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{clean_name}"
+
+    def update_options(self, options: dict[str, Any]) -> None:
+        """Обновление опций сущности."""
+        self._options = options
+        old_update_interval = self._update_interval
+        
+        self._update_interval = options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        self._enable_notifications = options.get(CONF_ENABLE_NOTIFICATIONS, True)
+        
+        # Если интервал обновления изменился, перенастраиваем таймер
+        if old_update_interval != self._update_interval and self._update_timer:
+            self._update_timer()  # Отменяем старый таймер
+            self._setup_auto_update()  # Создаем новый
 
     @property
     def device_info(self) -> DeviceInfo | None:
@@ -128,13 +164,41 @@ class MaintainableEntity(RestoreEntity):
         next_maintenance = self._get_next_maintenance_date()
         return (next_maintenance - dt_util.now()).days
 
+    def _fire_status_event(self, old_status: str | None, new_status: str) -> None:
+        """Отправка события при изменении статуса."""
+        if not self._enable_notifications or old_status == new_status:
+            return
+
+        event_data = {
+            "entity_id": self.entity_id,
+            "name": self._attr_name,
+            "old_status": old_status,
+            "new_status": new_status,
+            "days_remaining": self._get_days_remaining(),
+            "next_maintenance": self._get_next_maintenance_date().isoformat(),
+        }
+
+        # Определяем тип события
+        if new_status == STATE_OVERDUE and old_status != STATE_OVERDUE:
+            self.hass.bus.async_fire(EVENT_MAINTENANCE_OVERDUE, event_data)
+            _LOGGER.info(f"Maintenance overdue for {self._attr_name}")
+        elif new_status == STATE_DUE and old_status not in [STATE_DUE, STATE_OVERDUE]:
+            self.hass.bus.async_fire(EVENT_MAINTENANCE_DUE, event_data)
+            _LOGGER.info(f"Maintenance due for {self._attr_name}")
+
     async def async_added_to_hass(self) -> None:
         """Вызывается при добавлении сущности в Home Assistant."""
         await super().async_added_to_hass()
         
-        # Регистрируем сущность в общем хранилище
+        # Регистрируем сущность в общем хранилище с защитой от race condition
         if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
-            self.hass.data[DOMAIN][self._entry_id]["entities"][self.entity_id] = self
+            entities_dict = self.hass.data[DOMAIN][self._entry_id]["entities"]
+            # Используем asyncio.Lock для защиты от одновременного доступа
+            if not hasattr(entities_dict, '_lock'):
+                entities_dict._lock = asyncio.Lock()
+            
+            async with entities_dict._lock:
+                entities_dict[self.entity_id] = self
         
         # Восстанавливаем состояние из хранилища только если не было установлено при создании
         if (state := await self.async_get_last_state()) is not None:
@@ -151,38 +215,135 @@ class MaintainableEntity(RestoreEntity):
                     # Если не можем распарсить дату, оставляем текущую
                     pass
 
+        # Инициализируем последний статус
+        self._last_status = self._get_status()
+
+        # Настраиваем автоматическое обновление
+        self._setup_auto_update()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Вызывается при удалении сущности из Home Assistant."""
+        # Отменяем таймер обновления
+        if self._update_timer:
+            self._update_timer()
+            self._update_timer = None
+        
+        # Удаляем сущность из общего хранилища
+        if (DOMAIN in self.hass.data and 
+            self._entry_id in self.hass.data[DOMAIN] and
+            "entities" in self.hass.data[DOMAIN][self._entry_id]):
+            
+            entities_dict = self.hass.data[DOMAIN][self._entry_id]["entities"]
+            if hasattr(entities_dict, '_lock'):
+                async with entities_dict._lock:
+                    entities_dict.pop(self.entity_id, None)
+            else:
+                entities_dict.pop(self.entity_id, None)
+        
+        await super().async_will_remove_from_hass()
+
+    def _setup_auto_update(self) -> None:
+        """Настройка автоматического обновления состояния."""
+        # Используем конфигурируемый интервал обновления
+        self._update_timer = async_track_time_interval(
+            self.hass,
+            self._async_auto_update,
+            timedelta(minutes=self._update_interval)
+        )
+
+    async def _async_auto_update(self, now: datetime) -> None:
+        """Автоматическое обновление состояния."""
+        try:
+            old_status = self._last_status
+            current_status = self._get_status()
+            
+            # Проверяем изменение статуса и отправляем события
+            self._fire_status_event(old_status, current_status)
+            self._last_status = current_status
+            
+            self.async_write_ha_state()
+            _LOGGER.debug(f"Auto-updated {self.entity_id}, status: {current_status}")
+        except Exception as e:
+            _LOGGER.error(f"Error during auto-update of {self.entity_id}: {e}")
+
     def perform_maintenance(self) -> None:
         """Выполнить обслуживание - обновить дату последнего обслуживания."""
+        old_status = self._last_status
         self._last_maintenance = dt_util.now()
+        new_status = self._get_status()
+        
+        # Отправляем событие о выполненном обслуживании
+        if self._enable_notifications:
+            event_data = {
+                "entity_id": self.entity_id,
+                "name": self._attr_name,
+                "maintenance_date": self._last_maintenance.isoformat(),
+                "next_maintenance": self._get_next_maintenance_date().isoformat(),
+                "days_until_next": self._get_days_remaining(),
+            }
+            self.hass.bus.async_fire(EVENT_MAINTENANCE_COMPLETED, event_data)
+            _LOGGER.info(f"Maintenance completed for {self._attr_name}")
+        
+        self._last_status = new_status
         self.async_write_ha_state()
         
-        # Уведомляем все связанные сущности об изменении
-        if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
-            entities = self.hass.data[DOMAIN][self._entry_id]["entities"]
-            for entity_id, entity in entities.items():
-                if entity != self:  # Не уведомляем себя
-                    # Обновляем данные связанной сущности
-                    entity._last_maintenance = self._last_maintenance
-                    entity.async_write_ha_state()
+        # Уведомляем все связанные сущности об изменении с защитой от race condition
+        self.hass.async_create_task(self._async_notify_related_entities())
+
+    async def _async_notify_related_entities(self) -> None:
+        """Асинхронно уведомляем связанные сущности об изменении."""
+        if (DOMAIN in self.hass.data and 
+            self._entry_id in self.hass.data[DOMAIN] and
+            "entities" in self.hass.data[DOMAIN][self._entry_id]):
+            
+            entities_dict = self.hass.data[DOMAIN][self._entry_id]["entities"]
+            
+            # Используем lock если он есть
+            if hasattr(entities_dict, '_lock'):
+                async with entities_dict._lock:
+                    entities_to_update = list(entities_dict.items())
+            else:
+                entities_to_update = list(entities_dict.items())
+            
+            # Обновляем сущности вне lock'а
+            for entity_id, entity in entities_to_update:
+                if entity != self and hasattr(entity, '_last_maintenance'):
+                    try:
+                        entity._last_maintenance = self._last_maintenance
+                        entity._last_status = entity._get_status()  # Обновляем статус
+                        entity.async_write_ha_state()
+                    except Exception as e:
+                        _LOGGER.error(f"Error updating related entity {entity_id}: {e}")
 
     async def set_last_maintenance(self, maintenance_date: date) -> None:
         """Установить дату последнего обслуживания."""
-        # Конвертируем date в datetime с текущим временем
+        # Валидация: дата не должна быть в будущем
+        if maintenance_date > dt_util.now().date():
+            raise ValueError("Дата обслуживания не может быть в будущем")
+        
+        # Валидация: дата не должна быть слишком далеко в прошлом
+        max_past_date = dt_util.now().date() - timedelta(days=3650)  # 10 лет назад
+        if maintenance_date < max_past_date:
+            raise ValueError("Дата обслуживания слишком далеко в прошлом")
+        
+        old_status = self._last_status
+        
+        # Конвертируем date в datetime с полуднем для избежания проблем с часовыми поясами
         if isinstance(maintenance_date, date):
             self._last_maintenance = datetime.combine(
                 maintenance_date, 
-                datetime.min.time()
+                datetime.min.time().replace(hour=12)  # Используем полдень
             ).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
         else:
             self._last_maintenance = maintenance_date
+        
+        new_status = self._get_status()
+        
+        # Отправляем события при изменении статуса
+        self._fire_status_event(old_status, new_status)
+        self._last_status = new_status
             
         self.async_write_ha_state()
         
         # Уведомляем все связанные сущности об изменении
-        if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
-            entities = self.hass.data[DOMAIN][self._entry_id]["entities"]
-            for entity_id, entity in entities.items():
-                if entity != self:  # Не уведомляем себя
-                    # Обновляем данные связанной сущности
-                    entity._last_maintenance = self._last_maintenance
-                    entity.async_write_ha_state() 
+        await self._async_notify_related_entities() 

@@ -2,46 +2,48 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configure Maintenance Component",
-        "description": "Set up a component that requires periodic maintenance",
+        "title": "Setup Maintainable Component",
+        "description": "Enter information about the component that requires periodic maintenance",
         "data": {
           "name": "Component Name",
           "maintenance_interval": "Maintenance Interval (days)",
-          "last_maintenance": "Last Maintenance Date (optional)",
           "device_id": "Device (optional)"
-        },
-        "data_description": {
-          "name": "How the component will be named in Home Assistant",
-          "maintenance_interval": "How many days between maintenance",
-          "last_maintenance": "When the component was last serviced. If not specified, maintenance will be considered due now",
-          "device_id": "Which device to link the component to. Can be left empty to create a standalone entity"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_host": "Invalid host",
-      "unknown": "Unknown error"
+      "invalid_input": "Invalid input data. Please check the entered values.",
+      "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Component is already configured"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Maintenance Settings",
-        "description": "Change maintenance settings",
+        "title": "Additional Settings",
+        "description": "Configure additional parameters for the maintainable component",
         "data": {
-          "maintenance_interval": "Maintenance Interval (days)"
+          "update_interval": "Update Interval (minutes)",
+          "enable_notifications": "Enable event notifications"
         }
       }
+    },
+    "error": {
+      "invalid_options": "Invalid settings. Please check the entered values.",
+      "unknown": "Unexpected error"
     }
   },
   "entity": {
     "sensor": {
       "maintenance_status": {
-        "name": "Maintenance Status"
+        "name": "Maintenance Status",
+        "state": {
+          "ok": "OK",
+          "due": "Due",
+          "overdue": "Overdue"
+        }
       },
       "maintenance_days": {
         "name": "Days Until Maintenance"
@@ -62,27 +64,27 @@
   "services": {
     "get_overdue_items": {
       "name": "Get Overdue Items",
-      "description": "Returns a list of all components that require immediate maintenance"
+      "description": "Returns a list of components with overdue maintenance"
     },
     "get_due_items": {
-      "name": "Get Due Items", 
-      "description": "Returns a list of all components that will need maintenance soon (within 7 days)"
+      "name": "Get Due Items",
+      "description": "Returns a list of components that will soon require maintenance"
     },
     "get_all_items": {
       "name": "Get All Items",
-      "description": "Returns a list of all components with their status"
+      "description": "Returns a list of all maintainable components"
     },
     "set_last_maintenance": {
       "name": "Set Last Maintenance Date",
-      "description": "Set the last maintenance date for a specific component",
+      "description": "Sets the last maintenance date for the specified component",
       "fields": {
         "entity_id": {
-          "name": "Entity ID",
-          "description": "The entity ID of the maintenance component (sensor ending with _status)"
+          "name": "Entity",
+          "description": "Entity ID of the maintainable component"
         },
         "date": {
-          "name": "Maintenance Date",
-          "description": "The date when the component was last maintained"
+          "name": "Date",
+          "description": "Date of last maintenance"
         }
       }
     }

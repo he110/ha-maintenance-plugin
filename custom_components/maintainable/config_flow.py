@@ -16,9 +16,16 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
+    CONF_UPDATE_INTERVAL,
+    CONF_ENABLE_NOTIFICATIONS,
     DEFAULT_MAINTENANCE_INTERVAL,
     DEFAULT_NAME,
+    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    MIN_MAINTENANCE_INTERVAL,
+    MAX_MAINTENANCE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,8 +58,24 @@ def _get_step_user_schema(hass: HomeAssistant) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
-            vol.Required(CONF_MAINTENANCE_INTERVAL, default=DEFAULT_MAINTENANCE_INTERVAL): int,
+            vol.Required(
+                CONF_MAINTENANCE_INTERVAL, 
+                default=DEFAULT_MAINTENANCE_INTERVAL
+            ): vol.All(int, vol.Range(min=MIN_MAINTENANCE_INTERVAL, max=MAX_MAINTENANCE_INTERVAL)),
             vol.Optional(CONF_DEVICE_ID, default=""): vol.In(device_options),
+        }
+    )
+
+
+def _get_step_options_schema() -> vol.Schema:
+    """Получить схему для дополнительных опций."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_UPDATE_INTERVAL, 
+                default=DEFAULT_UPDATE_INTERVAL
+            ): vol.All(int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)),
+            vol.Optional(CONF_ENABLE_NOTIFICATIONS, default=True): bool,
         }
     )
 
@@ -75,25 +98,124 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             info = await validate_input(self.hass, user_input)
+        except ValueError as e:
+            _LOGGER.warning("Ошибка валидации: %s", e)
+            errors["base"] = "invalid_input"
         except Exception as e:  # pylint: disable=broad-except
-            _LOGGER.exception("Ошибка валидации: %s", e)
+            _LOGGER.exception("Неожиданная ошибка валидации: %s", e)
             errors["base"] = "unknown"
         else:
+            # Добавляем значения по умолчанию для дополнительных опций
+            user_input.setdefault(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+            user_input.setdefault(CONF_ENABLE_NOTIFICATIONS, True)
+            
             return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
             step_id="user", data_schema=_get_step_user_schema(self.hass), errors=errors
         )
 
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Получить поток опций."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Обработка потока опций."""
+
+    def __init__(self, config_entry):
+        """Инициализация обработчика опций."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Управление опциями."""
+        if user_input is not None:
+            # Валидируем опции
+            errors = {}
+            try:
+                await validate_options(user_input)
+            except ValueError as e:
+                _LOGGER.warning("Ошибка валидации опций: %s", e)
+                errors["base"] = "invalid_options"
+            except Exception as e:
+                _LOGGER.exception("Неожиданная ошибка валидации опций: %s", e)
+                errors["base"] = "unknown"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+
+            return self.async_show_form(
+                step_id="init",
+                data_schema=_get_step_options_schema(),
+                errors=errors
+            )
+
+        # Получаем текущие значения из конфигурации или опций
+        current_update_interval = (
+            self.config_entry.options.get(CONF_UPDATE_INTERVAL) or
+            self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        )
+        current_notifications = (
+            self.config_entry.options.get(CONF_ENABLE_NOTIFICATIONS) or
+            self.config_entry.data.get(CONF_ENABLE_NOTIFICATIONS, True)
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_UPDATE_INTERVAL, 
+                        default=current_update_interval
+                    ): vol.All(int, vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL)),
+                    vol.Optional(
+                        CONF_ENABLE_NOTIFICATIONS, 
+                        default=current_notifications
+                    ): bool,
+                }
+            ),
+        )
+
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Валидация пользовательского ввода."""
-    # Простая валидация
-    if not data.get(CONF_NAME):
+    # Валидация названия
+    name = data.get(CONF_NAME, "").strip()
+    if not name:
         raise ValueError("Название не может быть пустым")
     
+    if len(name) > 100:
+        raise ValueError("Название слишком длинное (максимум 100 символов)")
+    
+    # Валидация интервала обслуживания
     interval = data.get(CONF_MAINTENANCE_INTERVAL, 0)
-    if interval <= 0:
-        raise ValueError("Интервал обслуживания должен быть больше 0")
+    if not isinstance(interval, int) or interval < MIN_MAINTENANCE_INTERVAL or interval > MAX_MAINTENANCE_INTERVAL:
+        raise ValueError(
+            f"Интервал обслуживания должен быть от {MIN_MAINTENANCE_INTERVAL} до {MAX_MAINTENANCE_INTERVAL} дней"
+        )
 
-    return {"title": data[CONF_NAME]} 
+    # Валидация устройства (если указано)
+    device_id = data.get(CONF_DEVICE_ID)
+    if device_id:
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get(device_id)
+        if not device:
+            raise ValueError("Указанное устройство не найдено")
+
+    return {"title": name}
+
+
+async def validate_options(data: dict[str, Any]) -> None:
+    """Валидация опций."""
+    # Валидация интервала обновления
+    update_interval = data.get(CONF_UPDATE_INTERVAL)
+    if update_interval is not None:
+        if not isinstance(update_interval, int) or update_interval < MIN_UPDATE_INTERVAL or update_interval > MAX_UPDATE_INTERVAL:
+            raise ValueError(
+                f"Интервал обновления должен быть от {MIN_UPDATE_INTERVAL} до {MAX_UPDATE_INTERVAL} минут"
+            )
+
+    # Валидация уведомлений
+    notifications = data.get(CONF_ENABLE_NOTIFICATIONS)
+    if notifications is not None and not isinstance(notifications, bool):
+        raise ValueError("Настройка уведомлений должна быть булевым значением") 

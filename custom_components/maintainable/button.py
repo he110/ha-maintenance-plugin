@@ -22,17 +22,18 @@ async def async_setup_entry(
 ) -> None:
     """Настройка кнопок из конфигурационной записи."""
     config = config_entry.data
+    options = config_entry.options
     
     # Создаем кнопку для каждой записи конфигурации
-    async_add_entities([MaintainableButton(config, config_entry.entry_id)], True)
+    async_add_entities([MaintainableButton(config, config_entry.entry_id, options)], True)
 
 
 class MaintainableButton(MaintainableEntity, ButtonEntity):
     """Кнопка для выполнения обслуживания."""
 
-    def __init__(self, config: dict[str, Any], entry_id: str) -> None:
+    def __init__(self, config: dict[str, Any], entry_id: str, options: dict[str, Any] | None = None) -> None:
         """Инициализация кнопки обслуживания."""
-        super().__init__(config, entry_id)
+        super().__init__(config, entry_id, options)
         self._attr_name = f"{self._attr_name} Обслужить"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
 

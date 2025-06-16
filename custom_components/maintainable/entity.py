@@ -71,8 +71,8 @@ class MaintainableEntity(RestoreEntity):
             self._last_maintenance = dt_util.now()
         
         # Создаем уникальный ID на основе entry_id для избежания конфликтов
-        clean_name = self._attr_name.lower().replace(' ', '_').replace('-', '_')
-        self._attr_unique_id = f"{DOMAIN}_{entry_id}_{clean_name}"
+        # Используем только entry_id для стабильности
+        self._attr_unique_id = f"{DOMAIN}_{entry_id}"
 
     def update_options(self, options: dict[str, Any]) -> None:
         """Обновление опций сущности."""

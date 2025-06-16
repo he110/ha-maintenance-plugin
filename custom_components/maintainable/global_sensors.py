@@ -148,7 +148,7 @@ class MaintenanceOverdueCountSensor(MaintenanceCountSensorBase):
         """Инициализация сенсора просроченных компонентов."""
         super().__init__(hass, STATE_OVERDUE)
         self._attr_name = "Maintenance Overdue Count"
-        self._attr_unique_id = f"{DOMAIN}_overdue_count"
+        self._attr_unique_id = "maintenance_overdue_count"
         self._attr_icon = "mdi:alert-circle"
 
     @property
@@ -166,7 +166,7 @@ class MaintenanceDueCountSensor(MaintenanceCountSensorBase):
         """Инициализация сенсора компонентов требующих обслуживания."""
         super().__init__(hass, STATE_DUE)
         self._attr_name = "Maintenance Due Count"
-        self._attr_unique_id = f"{DOMAIN}_due_count"
+        self._attr_unique_id = "maintenance_due_count"
         self._attr_icon = "mdi:clock-alert"
 
     @property

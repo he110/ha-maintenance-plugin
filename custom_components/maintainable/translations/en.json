@@ -45,19 +45,17 @@
       },
       "maintenance_days": {
         "name": "Days Until Maintenance"
+      },
+      "maintenance_overdue_count": {
+        "name": "Maintenance Overdue Count"
+      },
+      "maintenance_due_count": {
+        "name": "Maintenance Due Count"
       }
     },
     "button": {
       "maintenance_perform": {
         "name": "Perform Maintenance"
-      }
-    }
-  },
-  "entity_component": {
-    "_": {
-      "name": {
-        "maintenance_overdue_count": "Maintenance Overdue Count",
-        "maintenance_due_count": "Maintenance Due Count"
       }
     }
   },

@@ -110,6 +110,7 @@ class MaintenanceOverdueCountSensor(MaintenanceCountSensor):
         self._attr_name = "Maintenance Overdue Count"
         self._attr_unique_id = f"{DOMAIN}_overdue_count"
         self._attr_icon = "mdi:alert-circle"
+        self._attr_translation_key = "maintenance_overdue_count"
 
     @property
     def icon(self) -> str:
@@ -129,6 +130,7 @@ class MaintenanceDueCountSensor(MaintenanceCountSensor):
         self._attr_name = "Maintenance Due Count"
         self._attr_unique_id = f"{DOMAIN}_due_count"
         self._attr_icon = "mdi:clock-alert"
+        self._attr_translation_key = "maintenance_due_count"
 
     @property
     def icon(self) -> str:

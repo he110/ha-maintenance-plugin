@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <circle cx="64" cy="64" r="56" fill="#3498db" stroke="#2980b9" stroke-width="4"/>
+  <path d="M64 28l8 16h16l-8 8 8 16-16-8-16 8 8-16-8-8h16z" fill="white"/>
+  <circle cx="64" cy="64" r="16" fill="white"/>
+  <circle cx="64" cy="64" r="8" fill="#3498db"/>
+  <text x="64" y="100" text-anchor="middle" font-family="Arial" font-size="12" fill="white">Maintain</text>
+</svg> 

@@ -6,13 +6,15 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
 
-from .const import DOMAIN
+from .const import DOMAIN, STATE_OVERDUE, STATE_DUE, STATE_OK
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,29 +22,130 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 SCAN_INTERVAL = timedelta(minutes=1)
 
+# Схемы для services
+SERVICE_GET_OVERDUE_ITEMS = "get_overdue_items"
+SERVICE_GET_DUE_ITEMS = "get_due_items"
+SERVICE_GET_ALL_ITEMS = "get_all_items"
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Настройка интеграции из конфигурационной записи."""
     hass.data.setdefault(DOMAIN, {})
-    
-    # Создаем общее хранилище для данных интеграции
+    hass.data[DOMAIN].setdefault(entry.entry_id, {})
     hass.data[DOMAIN][entry.entry_id] = {
-        "entities": {},  # Для хранения ссылок на сущности
         "config": entry.data,
+        "entities": {},  # Хранилище для связи между сущностями
     }
 
-    # Настройка платформ
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Регистрируем services
+    await _async_setup_services(hass)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Выгрузка интеграции."""
+    """Выгрузка конфигурационной записи."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
+        
+        # Если это была последняя запись, удаляем services
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, SERVICE_GET_OVERDUE_ITEMS)
+            hass.services.async_remove(DOMAIN, SERVICE_GET_DUE_ITEMS) 
+            hass.services.async_remove(DOMAIN, SERVICE_GET_ALL_ITEMS)
 
     return unload_ok
+
+
+async def _async_setup_services(hass: HomeAssistant) -> None:
+    """Настройка services для интеграции."""
+    
+    async def async_get_overdue_items(call: ServiceCall) -> ServiceResponse:
+        """Service для получения просроченных компонентов."""
+        items = []
+        
+        for entry_id, entry_data in hass.data[DOMAIN].items():
+            if isinstance(entry_data, dict) and "entities" in entry_data:
+                for entity_id, entity in entry_data["entities"].items():
+                    if hasattr(entity, '_get_status') and entity._get_status() == STATE_OVERDUE:
+                        items.append({
+                            "entity_id": entity_id,
+                            "name": entity.name,
+                            "status": entity._get_status(),
+                            "days_remaining": entity._get_days_remaining(),
+                            "last_maintenance": entity._last_maintenance.isoformat() if entity._last_maintenance else None,
+                            "next_maintenance": entity._get_next_maintenance_date().isoformat(),
+                            "maintenance_interval": entity._maintenance_interval,
+                        })
+        
+        return {"items": items}
+
+    async def async_get_due_items(call: ServiceCall) -> ServiceResponse:
+        """Service для получения компонентов требующих обслуживания."""
+        items = []
+        
+        for entry_id, entry_data in hass.data[DOMAIN].items():
+            if isinstance(entry_data, dict) and "entities" in entry_data:
+                for entity_id, entity in entry_data["entities"].items():
+                    if hasattr(entity, '_get_status') and entity._get_status() == STATE_DUE:
+                        items.append({
+                            "entity_id": entity_id,
+                            "name": entity.name,
+                            "status": entity._get_status(),
+                            "days_remaining": entity._get_days_remaining(),
+                            "last_maintenance": entity._last_maintenance.isoformat() if entity._last_maintenance else None,
+                            "next_maintenance": entity._get_next_maintenance_date().isoformat(),
+                            "maintenance_interval": entity._maintenance_interval,
+                        })
+        
+        return {"items": items}
+
+    async def async_get_all_items(call: ServiceCall) -> ServiceResponse:
+        """Service для получения всех компонентов."""
+        items = []
+        
+        for entry_id, entry_data in hass.data[DOMAIN].items():
+            if isinstance(entry_data, dict) and "entities" in entry_data:
+                for entity_id, entity in entry_data["entities"].items():
+                    if hasattr(entity, '_get_status'):
+                        items.append({
+                            "entity_id": entity_id,
+                            "name": entity.name,
+                            "status": entity._get_status(),
+                            "days_remaining": entity._get_days_remaining(),
+                            "last_maintenance": entity._last_maintenance.isoformat() if entity._last_maintenance else None,
+                            "next_maintenance": entity._get_next_maintenance_date().isoformat(),
+                            "maintenance_interval": entity._maintenance_interval,
+                        })
+        
+        return {"items": items}
+
+    # Регистрируем services только если они еще не зарегистрированы
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_OVERDUE_ITEMS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_OVERDUE_ITEMS,
+            async_get_overdue_items,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_DUE_ITEMS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_DUE_ITEMS,
+            async_get_due_items,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_ALL_ITEMS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_ALL_ITEMS,
+            async_get_all_items,
+            supports_response=SupportsResponse.ONLY,
+        )
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

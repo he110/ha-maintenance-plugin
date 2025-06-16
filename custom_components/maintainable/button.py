@@ -24,16 +24,16 @@ async def async_setup_entry(
     config = config_entry.data
     
     # Создаем кнопку для каждой записи конфигурации
-    async_add_entities([MaintenanceButton(config, config_entry.entry_id)], True)
+    async_add_entities([MaintainableButton(config, config_entry.entry_id)], True)
 
 
-class MaintenanceButton(MaintainableEntity, ButtonEntity):
+class MaintainableButton(MaintainableEntity, ButtonEntity):
     """Кнопка для выполнения обслуживания."""
 
     def __init__(self, config: dict[str, Any], entry_id: str) -> None:
         """Инициализация кнопки обслуживания."""
         super().__init__(config, entry_id)
-        self._attr_name = f"{self._attr_name} - Обслужить"
+        self._attr_name = f"{self._attr_name} Обслужить"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
 
     @property
@@ -41,8 +41,13 @@ class MaintenanceButton(MaintainableEntity, ButtonEntity):
         """Иконка кнопки."""
         return "mdi:wrench"
 
+    @property
+    def translation_key(self) -> str:
+        """Ключ перевода для кнопки."""
+        return "maintenance_perform"
+
     async def async_press(self) -> None:
         """Обработка нажатия кнопки."""
-        _LOGGER.info("Выполнение обслуживания для %s", self._attr_name)
+        _LOGGER.info("Выполнение обслуживания для %s", self.name)
         # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
         self.perform_maintenance() 

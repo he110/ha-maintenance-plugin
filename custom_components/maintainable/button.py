@@ -34,7 +34,7 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
     def __init__(self, config: dict[str, Any], entry_id: str, options: dict[str, Any] | None = None) -> None:
         """Инициализация кнопки обслуживания."""
         super().__init__(config, entry_id, options)
-        self._attr_name = f"{self._attr_name} Обслужить"
+        self._attr_name = f"{config['name']} Perform Maintenance"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
 
     @property
@@ -45,7 +45,7 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
     @property
     def translation_key(self) -> str:
         """Ключ перевода для кнопки."""
-        return "maintenance_perform"
+        return "perform_maintenance"
 
     async def async_press(self) -> None:
         """Обработка нажатия кнопки."""

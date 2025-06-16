@@ -76,6 +76,10 @@
       "name": "Get All Items",
       "description": "Returns a list of all maintainable components"
     },
+    "perform_maintenance": {
+      "name": "Perform Maintenance",
+      "description": "Mark maintenance as completed for specified components"
+    },
     "set_last_maintenance": {
       "name": "Set Last Maintenance Date",
       "description": "Set the last maintenance date for specified components",

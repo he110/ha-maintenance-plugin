@@ -24,6 +24,9 @@ The **Maintainable** integration allows you to easily track objects that need pe
 
 ### 🚀 HACS (Recommended)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=he110&repository=ha-maintenance-plugin)
+
+
 1. Ensure you have [HACS](https://hacs.xyz/) installed
 2. Add this repository to HACS as a custom repository:
    - Open HACS

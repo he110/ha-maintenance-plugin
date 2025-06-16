@@ -29,4 +29,9 @@ set_last_maintenance:
       description: The date when the component was last maintained
       required: true
       selector:
-        date: 
+        date:
+
+reload_global_sensors:
+  name: Reload Global Sensors
+  description: Force creation of global maintenance count sensors
+  fields: {} 

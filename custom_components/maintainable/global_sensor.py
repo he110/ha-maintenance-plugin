@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, STATE_OVERDUE, STATE_DUE, STATE_OK
 
@@ -21,24 +22,30 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Настройка глобальных сенсоров подсчета."""
-    # Создаем глобальные сенсоры только для первой записи интеграции
-    # Проверяем, есть ли уже глобальные сенсоры
-    existing_entities = []
-    for entity_id in hass.states.async_entity_ids("sensor"):
-        if entity_id in ["sensor.maintenance_overdue_count", "sensor.maintenance_due_count"]:
-            existing_entities.append(entity_id)
+    # Проверяем, есть ли уже созданные глобальные сенсоры в реестре сущностей
+    entity_registry = er.async_get(hass)
     
-    # Если глобальные сенсоры уже существуют, не создаем их повторно
-    if existing_entities:
+    overdue_exists = entity_registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{DOMAIN}_overdue_count"
+    )
+    due_exists = entity_registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{DOMAIN}_due_count"
+    )
+    
+    # Создаем только те сенсоры, которых еще нет
+    entities = []
+    if not overdue_exists:
+        entities.append(MaintenanceOverdueCountSensor(hass))
+        _LOGGER.debug("Creating maintenance overdue count sensor")
+    
+    if not due_exists:
+        entities.append(MaintenanceDueCountSensor(hass))
+        _LOGGER.debug("Creating maintenance due count sensor")
+    
+    if entities:
+        async_add_entities(entities)
+    else:
         _LOGGER.debug("Global maintenance sensors already exist, skipping creation")
-        return
-    
-    entities = [
-        MaintenanceOverdueCountSensor(hass),
-        MaintenanceDueCountSensor(hass),
-    ]
-    
-    async_add_entities(entities)
 
 
 class MaintenanceCountSensor(SensorEntity):

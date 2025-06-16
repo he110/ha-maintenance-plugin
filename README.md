@@ -10,6 +10,8 @@ The **Maintainable** integration allows you to easily track objects that need pe
 - Robot vacuum consumables
 - Any other components requiring replacement or servicing
 
+![example](images/device_sensors.png)
+
 ## Features
 
 - **Maintenance tracking** - Set maintenance intervals in days

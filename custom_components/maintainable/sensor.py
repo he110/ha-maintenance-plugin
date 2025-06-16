@@ -15,7 +15,6 @@ from .const import (
     STATE_OVERDUE,
 )
 from .entity import MaintainableEntity
-from .global_sensors import async_setup_global_sensors
 
 
 async def async_setup_entry(
@@ -34,9 +33,6 @@ async def async_setup_entry(
     ]
     
     async_add_entities(entities)
-    
-    # Создаем глобальные сенсоры подсчета (только один раз для всей интеграции)
-    await async_setup_global_sensors(hass, async_add_entities)
 
 
 class MaintainableStatusSensor(MaintainableEntity, SensorEntity):

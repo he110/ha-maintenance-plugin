@@ -25,7 +25,9 @@ async def async_setup_entry(
     options = config_entry.options
     
     # Создаем кнопку для каждой записи конфигурации
-    async_add_entities([MaintainableButton(config, config_entry.entry_id, options)], True)
+    entities = [MaintainableButton(config, config_entry.entry_id, options)]
+    async_add_entities(entities)
+    _LOGGER.info(f"Created button entity for {config.get('name', 'Unknown')}")
 
 
 class MaintainableButton(MaintainableEntity, ButtonEntity):
@@ -36,6 +38,12 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
         super().__init__(config, entry_id, options)
         self._attr_name = f"{config['name']} Perform Maintenance"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
+        _LOGGER.info(f"Initialized button with unique_id: {self._attr_unique_id}")
+
+    @property
+    def available(self) -> bool:
+        """Кнопка всегда доступна."""
+        return True
 
     @property
     def icon(self) -> str:
@@ -49,6 +57,10 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Обработка нажатия кнопки."""
-        _LOGGER.info("Выполнение обслуживания для %s", self.name)
-        # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
-        self.perform_maintenance() 
+        try:
+            _LOGGER.info("Выполнение обслуживания для %s", self.name)
+            # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
+            self.perform_maintenance()
+            _LOGGER.info("Обслуживание выполнено успешно для %s", self.name)
+        except Exception as e:
+            _LOGGER.error("Ошибка при выполнении обслуживания для %s: %s", self.name, e) 

@@ -46,12 +46,6 @@
       },
       "maintenance_days": {
         "name": "Дни до обслуживания"
-      },
-      "maintenance_overdue_count": {
-        "name": "Количество просроченных компонентов"
-      },
-      "maintenance_due_count": {
-        "name": "Количество компонентов требующих обслуживания"
       }
     },
     "button": {

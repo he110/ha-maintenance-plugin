@@ -46,12 +46,6 @@
       },
       "maintenance_days": {
         "name": "Days Until Maintenance"
-      },
-      "maintenance_overdue_count": {
-        "name": "Maintenance Overdue Count"
-      },
-      "maintenance_due_count": {
-        "name": "Maintenance Due Count"
       }
     },
     "button": {

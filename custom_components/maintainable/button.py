@@ -1,4 +1,4 @@
-"""Платформа кнопок для интеграции Maintainable."""
+"""Кнопки для интеграции Maintainable."""
 from __future__ import annotations
 
 import logging
@@ -9,16 +9,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import device_registry as dr
-from homeassistant.util import dt as dt_util
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_DEVICE_ID,
-    CONF_LAST_MAINTENANCE,
-    CONF_NAME,
+    DATA_COORDINATOR,
     DOMAIN,
-    ICON_BUTTON,
+    BUTTON_SUFFIX,
 )
+from .coordinator import MaintenanceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,92 +26,90 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Настройка кнопок из конфигурационной записи."""
-    config = config_entry.data
-    entry_id = config_entry.entry_id
+    """Настройка кнопок."""
+    coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_COORDINATOR]
     
-    # Создаем кнопку для выполнения обслуживания
-    entities = [MaintainableButton(config, entry_id, config_entry)]
-    async_add_entities(entities)
-    _LOGGER.info("Created button for %s", config.get(CONF_NAME, "Unknown"))
+    # Создаём кнопку
+    entities = [
+        MaintenanceButton(coordinator, config_entry),
+    ]
+    
+    async_add_entities(entities, True)
 
 
-class MaintainableButton(ButtonEntity):
+class MaintenanceButton(CoordinatorEntity, ButtonEntity):
     """Кнопка для выполнения обслуживания."""
 
-    def __init__(self, config: dict[str, Any], entry_id: str, config_entry: ConfigEntry) -> None:
-        """Инициализация кнопки обслуживания."""
-        self._config = config
-        self._entry_id = entry_id
-        self._config_entry = config_entry
-        self._name = config[CONF_NAME]
-        self._device_id = config.get(CONF_DEVICE_ID)
+    def __init__(
+        self,
+        coordinator: MaintenanceCoordinator,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Инициализация кнопки."""
+        super().__init__(coordinator)
+        self.config_entry = config_entry
+        self._component_name = config_entry.data.get("name", "Компонент")
+        component_name_safe = self._component_name.lower().replace(" ", "_")
         
-        self._attr_name = f"{self._name} Perform Maintenance"
-        self._attr_unique_id = f"{DOMAIN}_{entry_id}_button"
+        self._attr_unique_id = f"{config_entry.entry_id}{BUTTON_SUFFIX}"
+        self._attr_name = f"{self._component_name} - Выполнить обслуживание"
+        # Отключаем has_entity_name для правильного именования
+        self._attr_has_entity_name = False
+        self._attr_icon = "mdi:wrench"
+        
+        # Устанавливаем правильный entity_id
+        self.entity_id = f"button.{component_name_safe}_maintenance_button"
 
     @property
     def device_info(self) -> DeviceInfo | None:
-        """Информация об устройстве для привязки кнопки."""
-        if not self._device_id:
-            return None
-            
-        device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get(self._device_id)
+        """Информация об устройстве."""
+        device_id = self.config_entry.data.get("device_id")
+        _LOGGER.debug("Кнопка %s: device_id из конфигурации = %s", self._component_name, device_id)
         
-        if not device:
-            return None
+        if device_id:
+            # Получаем устройство из реестра
+            from homeassistant.helpers import device_registry as dr
+            device_registry = dr.async_get(self.hass)
+            device = device_registry.async_get(device_id)
+            _LOGGER.debug("Кнопка %s: устройство найдено = %s", self._component_name, device is not None)
             
-        return DeviceInfo(
-            identifiers=device.identifiers,
-            name=device.name,
-        )
+            if device:
+                _LOGGER.info("Кнопка %s: привязываем к устройству %s (identifiers: %s)", 
+                           self._component_name, device.name, device.identifiers)
+                # Возвращаем DeviceInfo с теми же identifiers что и у оригинального устройства
+                return DeviceInfo(
+                    identifiers=device.identifiers,
+                    connections=device.connections,
+                )
+            else:
+                _LOGGER.warning("Кнопка %s: устройство с ID %s не найдено в реестре", 
+                              self._component_name, device_id)
+        return None
 
     @property
-    def icon(self) -> str:
-        """Иконка кнопки."""
-        return ICON_BUTTON
+    def available(self) -> bool:
+        """Доступность кнопки."""
+        return self.coordinator.last_update_success
 
     async def async_press(self) -> None:
         """Обработка нажатия кнопки."""
         try:
-            _LOGGER.info("Выполнение обслуживания для %s", self._name)
-            
-            # Обновляем дату последнего обслуживания в конфигурации
-            new_data = dict(self._config_entry.data)
-            new_data[CONF_LAST_MAINTENANCE] = dt_util.now().date().isoformat()
-            
-            self.hass.config_entries.async_update_entry(
-                self._config_entry, data=new_data
-            )
-            
-            # Обновляем состояние связанных сенсоров
-            await self._update_sensors()
-            
-            _LOGGER.info("Обслуживание выполнено успешно для %s", self._name)
-            
-        except Exception as e:
-            _LOGGER.error("Ошибка при выполнении обслуживания для %s: %s", self._name, e)
+            await self.coordinator.async_perform_maintenance()
+            _LOGGER.info("Обслуживание выполнено для %s", self._component_name)
+        except Exception as err:
+            _LOGGER.error("Ошибка при выполнении обслуживания для %s: %s", 
+                         self._component_name, err)
+            raise
 
-    async def _update_sensors(self) -> None:
-        """Обновить состояние связанных сенсоров."""
-        try:
-            # Получаем ссылки на сенсоры из хранилища
-            if (DOMAIN in self.hass.data and 
-                self._entry_id in self.hass.data[DOMAIN]):
-                
-                entry_data = self.hass.data[DOMAIN][self._entry_id]
-                current_date = dt_util.now()
-                
-                # Обновляем сенсор статуса
-                if "sensor_status" in entry_data:
-                    status_sensor = entry_data["sensor_status"]
-                    status_sensor.update_last_maintenance(current_date)
-                
-                # Обновляем сенсор дней
-                if "sensor_days" in entry_data:
-                    days_sensor = entry_data["sensor_days"]
-                    days_sensor.update_last_maintenance(current_date)
-                    
-        except Exception as e:
-            _LOGGER.error("Ошибка при обновлении сенсоров: %s", e) 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Дополнительные атрибуты кнопки."""
+        if not self.coordinator.data:
+            return {}
+        
+        return {
+            "component_name": self._component_name,
+            "current_status": self.coordinator.data.get("status"),
+            "days_until_maintenance": self.coordinator.data.get("days_until_maintenance"),
+            "last_maintenance_date": self.coordinator.data.get("last_maintenance_date"),
+        } 

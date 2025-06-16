@@ -2,21 +2,18 @@
   "config": {
     "step": {
       "user": {
-        "title": "Setup Maintenance Component",
-        "description": "Add a new component that requires periodic maintenance",
+        "title": "Setup Maintainable Component",
+        "description": "Enter information about a component that requires regular maintenance",
         "data": {
-          "name": "Component Name",
-          "maintenance_interval": "Maintenance Interval (days)",
-          "device_id": "Device (optional)"
+          "name": "Component name",
+          "maintenance_interval": "Maintenance interval (days)",
+          "device_id": "Link to device (optional)"
         }
       }
     },
     "error": {
-      "empty_name": "Name cannot be empty",
-      "name_too_long": "Name is too long (maximum 100 characters)",
-      "name_exists": "Component with this name already exists",
-      "invalid_interval": "Interval must be between 1 and 3650 days",
-      "device_not_found": "Specified device not found"
+      "invalid_input": "Invalid input data",
+      "unknown": "Unknown error"
     },
     "abort": {
       "already_configured": "Component is already configured"
@@ -49,13 +46,6 @@
       },
       "maintenance_days": {
         "name": "Days Until Maintenance"
-      },
-      "status": {
-        "state": {
-          "ok": "OK",
-          "due": "Due",
-          "overdue": "Overdue"
-        }
       }
     },
     "button": {

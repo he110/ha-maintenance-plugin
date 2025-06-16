@@ -1,101 +1,175 @@
-"""Конфигурационный поток для интеграции Maintainable."""
+"""Поток конфигурации для интеграции Maintainable."""
 from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import datetime
 
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import device_registry as dr
-
-from .const import (
-    CONF_DEVICE_ID,
-    CONF_MAINTENANCE_INTERVAL,
-    CONF_NAME,
-    DEFAULT_MAINTENANCE_INTERVAL,
-    DEFAULT_NAME,
-    DOMAIN,
-    MIN_MAINTENANCE_INTERVAL,
-    MAX_MAINTENANCE_INTERVAL,
+from homeassistant.helpers.selector import (
+    DeviceSelector,
+    DeviceSelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+    DateSelector,
+    DateSelectorConfig,
 )
+
+from .const import DOMAIN, DEFAULT_MAINTENANCE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _get_device_options(hass: HomeAssistant) -> dict[str, str]:
-    """Получить список доступных устройств."""
-    try:
-        device_registry = dr.async_get(hass)
-        devices = {"": "Без устройства"}
-        
-        for device in device_registry.devices.values():
-            if device.name and not device.disabled:
-                devices[device.id] = device.name
-        
-        return devices
-    except Exception as e:
-        _LOGGER.error("Ошибка получения устройств: %s", e)
-        return {"": "Без устройства"}
-
-
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Обработка конфигурационного потока для Maintainable."""
+class MaintenableConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Обработка потока конфигурации для Maintainable."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Обработка шага пользовательского ввода."""
-        errors = {}
+        """Обработка начального шага конфигурации."""
+        errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Валидация названия
-            name = user_input[CONF_NAME].strip()
-            if not name:
-                errors[CONF_NAME] = "empty_name"
-            elif len(name) > 100:
-                errors[CONF_NAME] = "name_too_long"
+            try:
+                # Проверяем корректность входных данных
+                name = user_input["name"].strip()
+                maintenance_interval = user_input["maintenance_interval"]
+                
+                if not name:
+                    errors["name"] = "invalid_name"
+                elif maintenance_interval <= 0:
+                    errors["maintenance_interval"] = "invalid_interval"
+                else:
+                    # Создаём уникальный ID для этого компонента
+                    unique_id = f"{DOMAIN}_{name.lower().replace(' ', '_')}"
+                    
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_configured()
 
-            # Валидация интервала
-            interval = user_input[CONF_MAINTENANCE_INTERVAL]
-            if interval < MIN_MAINTENANCE_INTERVAL or interval > MAX_MAINTENANCE_INTERVAL:
-                errors[CONF_MAINTENANCE_INTERVAL] = "invalid_interval"
+                    # Обрабатываем дату последнего обслуживания
+                    last_maintenance_date = user_input.get("last_maintenance_date")
+                    if last_maintenance_date:
+                        _LOGGER.info("Получена дата последнего обслуживания: %s (тип: %s)", last_maintenance_date, type(last_maintenance_date))
+                        
+                        # Обрабатываем разные типы входных данных
+                        if hasattr(last_maintenance_date, 'date') and callable(getattr(last_maintenance_date, 'date')):
+                            # Это объект datetime
+                            last_maintenance_str = last_maintenance_date.isoformat()
+                        elif hasattr(last_maintenance_date, 'isoformat'):
+                            # Это объект date
+                            last_maintenance_datetime = datetime.combine(last_maintenance_date, datetime.min.time())
+                            last_maintenance_str = last_maintenance_datetime.isoformat()
+                        elif isinstance(last_maintenance_date, str):
+                            # Строка - пытаемся парсить
+                            try:
+                                parsed_datetime = datetime.fromisoformat(last_maintenance_date)
+                                last_maintenance_str = parsed_datetime.isoformat()
+                            except ValueError:
+                                try:
+                                    from datetime import date
+                                    parsed_date = date.fromisoformat(last_maintenance_date)
+                                    parsed_datetime = datetime.combine(parsed_date, datetime.min.time())
+                                    last_maintenance_str = parsed_datetime.isoformat()
+                                except ValueError:
+                                    _LOGGER.error("Не удалось распарсить дату: %s", last_maintenance_date)
+                                    last_maintenance_str = datetime.now().isoformat()
+                        else:
+                            _LOGGER.warning("Неизвестный тип даты: %s", type(last_maintenance_date))
+                            last_maintenance_str = datetime.now().isoformat()
+                    else:
+                        last_maintenance_str = datetime.now().isoformat()
+                    
+                    _LOGGER.info("Сохраняем дату последнего обслуживания: %s", last_maintenance_str)
 
-            # Валидация устройства
-            device_id = user_input.get(CONF_DEVICE_ID)
-            if device_id:
-                device_registry = dr.async_get(self.hass)
-                if not device_registry.async_get(device_id):
-                    errors[CONF_DEVICE_ID] = "device_not_found"
+                    # Логируем device_id для диагностики
+                    device_id = user_input.get("device_id")
+                    _LOGGER.info("Device ID выбран: %s (тип: %s)", device_id, type(device_id))
 
-            if not errors:
-                # Проверяем уникальность названия
-                for entry in self._async_current_entries():
-                    if entry.data.get(CONF_NAME) == name:
-                        errors[CONF_NAME] = "name_exists"
-                        break
+                    return self.async_create_entry(
+                        title=name,
+                        data={
+                            "name": name,
+                            "maintenance_interval": maintenance_interval,
+                            "device_id": user_input.get("device_id"),
+                            "last_maintenance_date": last_maintenance_str,
+                        },
+                    )
+                    
+            except Exception as ex:
+                _LOGGER.error("Ошибка при настройке: %s", ex)
+                errors["base"] = "unknown"
 
-            if not errors:
-                return self.async_create_entry(title=name, data=user_input)
-
-        # Получаем список устройств для выбора
-        device_options = _get_device_options(self.hass)
-
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
-                vol.Required(
-                    CONF_MAINTENANCE_INTERVAL,
-                    default=DEFAULT_MAINTENANCE_INTERVAL
-                ): vol.All(int, vol.Range(min=MIN_MAINTENANCE_INTERVAL, max=MAX_MAINTENANCE_INTERVAL)),
-                vol.Optional(CONF_DEVICE_ID, default=""): vol.In(device_options),
-            }
-        )
+        # Получаем список устройств для селектора
+        device_registry = dr.async_get(self.hass)
+        devices = list(device_registry.devices.values())
+        
+        # Создаём схему для формы
+        data_schema = vol.Schema({
+            vol.Required("name"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Required("maintenance_interval", default=DEFAULT_MAINTENANCE_INTERVAL): 
+                NumberSelector(
+                    NumberSelectorConfig(
+                        mode=NumberSelectorMode.BOX,
+                        min=1,
+                        unit_of_measurement="дней"
+                    )
+                ),
+            vol.Optional("last_maintenance_date"): DateSelector(
+                DateSelectorConfig()
+            ),
+            vol.Optional("device_id"): DeviceSelector(
+                DeviceSelectorConfig()
+            ),
+        })
 
         return self.async_show_form(
-            step_id="user", data_schema=data_schema, errors=errors
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> MaintenableOptionsFlowHandler:
+        """Создать поток настройки опций."""
+        return MaintenableOptionsFlowHandler(config_entry)
+
+
+class MaintenableOptionsFlowHandler(config_entries.OptionsFlow):
+    """Обработка опций для Maintainable."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Инициализация обработчика опций."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Управление опциями."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional(
+                    "enable_notifications",
+                    default=self.config_entry.options.get("enable_notifications", False),
+                ): bool,
+            }),
         ) 

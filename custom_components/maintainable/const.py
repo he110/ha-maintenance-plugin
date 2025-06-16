@@ -1,33 +1,32 @@
 """Константы для интеграции Maintainable."""
+from __future__ import annotations
+
+from homeassistant.const import Platform
 
 # Основные константы
 DOMAIN = "maintainable"
-DEFAULT_NAME = "Новый компонент"
-DEFAULT_MAINTENANCE_INTERVAL = 365
+PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
 
-# Константы конфигурации
-CONF_NAME = "name"
-CONF_MAINTENANCE_INTERVAL = "maintenance_interval"
-CONF_DEVICE_ID = "device_id"
-CONF_LAST_MAINTENANCE = "last_maintenance"
+# Ключи для хранения данных
+DATA_COORDINATOR = "coordinator"
 
-# Константы состояний
-STATE_OK = "ok"
-STATE_DUE = "due"
-STATE_OVERDUE = "overdue"
+# Состояния обслуживания
+MAINTENANCE_STATUS_OK = "ok"
+MAINTENANCE_STATUS_DUE = "due"
+MAINTENANCE_STATUS_OVERDUE = "overdue"
 
-# Константы атрибутов
-ATTR_MAINTENANCE_INTERVAL = "maintenance_interval"
-ATTR_LAST_MAINTENANCE = "last_maintenance"
-ATTR_NEXT_MAINTENANCE = "next_maintenance"
-ATTR_DAYS_REMAINING = "days_remaining"
-ATTR_STATUS = "status"
+# Пороги для статусов (в днях)
+DUE_THRESHOLD = 7  # За 7 дней до срока - статус "due"
 
-# Иконки
-ICON_STATUS = "mdi:tools"
-ICON_DAYS = "mdi:calendar-clock"
-ICON_BUTTON = "mdi:wrench"
+# Суффиксы для сущностей
+STATUS_SUFFIX = "_m_status"
+DAYS_SUFFIX = "_m_days"
+BUTTON_SUFFIX = "_maintenance_button"
 
-# Ограничения
-MIN_MAINTENANCE_INTERVAL = 1
-MAX_MAINTENANCE_INTERVAL = 3650  # 10 лет 
+# События
+EVENT_MAINTENANCE_DUE = "maintainable_due"
+EVENT_MAINTENANCE_OVERDUE = "maintainable_overdue"
+EVENT_MAINTENANCE_COMPLETED = "maintainable_completed"
+
+# Конфигурация по умолчанию
+DEFAULT_MAINTENANCE_INTERVAL = 30  # дней 

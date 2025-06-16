@@ -1,0 +1,37 @@
+perform_maintenance:
+  name: "Выполнить обслуживание"
+  description: "Отметить обслуживание как выполненное для указанного компонента"
+  target:
+    entity:
+      domain: sensor
+      integration: maintainable
+  fields:
+    entity_id:
+      name: "Сущность"
+      description: "ID сенсора обслуживаемого компонента"
+      required: true
+      selector:
+        entity:
+          integration: maintainable
+
+set_last_maintenance:
+  name: "Установить дату последнего обслуживания"
+  description: "Установить дату последнего обслуживания для указанного компонента"
+  target:
+    entity:
+      domain: sensor
+      integration: maintainable
+  fields:
+    entity_id:
+      name: "Сущность"
+      description: "ID сенсора обслуживаемого компонента"
+      required: true
+      selector:
+        entity:
+          integration: maintainable
+    maintenance_date:
+      name: "Дата обслуживания"
+      description: "Дата выполнения обслуживания"
+      required: true
+      selector:
+        date: 

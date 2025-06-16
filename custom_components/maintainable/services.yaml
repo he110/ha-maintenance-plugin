@@ -1,20 +1,14 @@
 get_overdue_items:
-  name: Получить просроченные компоненты
-  description: Возвращает список всех компонентов, которые требуют немедленного обслуживания
-  response:
-    optional: false
+  name: Get Overdue Items
+  description: Returns a list of all components that require immediate maintenance
   fields: {}
 
 get_due_items:
-  name: Получить компоненты требующие обслуживания
-  description: Возвращает список всех компонентов, которые скоро потребуют обслуживания (в течение 7 дней)
-  response:
-    optional: false
+  name: Get Due Items
+  description: Returns a list of all components that will need maintenance soon (within 7 days)
   fields: {}
 
 get_all_items:
-  name: Получить все компоненты
-  description: Возвращает список всех компонентов с их статусами
-  response:
-    optional: false
+  name: Get All Items
+  description: Returns a list of all components with their status
   fields: {} 

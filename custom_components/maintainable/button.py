@@ -35,17 +35,19 @@ class MaintainableButton(MaintainableEntity, ButtonEntity):
 
     def __init__(self, config: dict[str, Any], entry_id: str, options: dict[str, Any] | None = None) -> None:
         """Инициализация кнопки обслуживания."""
+        _LOGGER.info(f"Creating button for config: {config}")
         super().__init__(config, entry_id, options)
         self._attr_name = f"{config['name']} Perform Maintenance"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
-        _LOGGER.info(f"Initialized button with unique_id: {self._attr_unique_id}")
+        _LOGGER.info(f"Initialized button with unique_id: {self._attr_unique_id}, name: {self._attr_name}")
 
     async def async_added_to_hass(self) -> None:
         """Вызывается при добавлении кнопки в Home Assistant."""
+        _LOGGER.info(f"Adding button {self._attr_unique_id} to HA")
         await super().async_added_to_hass()
         # Немедленно записываем состояние чтобы кнопка стала доступной
         self.async_write_ha_state()
-        _LOGGER.info(f"Button {self.entity_id} added to HA and state written")
+        _LOGGER.info(f"Button {self.entity_id} added to HA and state written, available: {self.available}")
 
     @property
     def available(self) -> bool:

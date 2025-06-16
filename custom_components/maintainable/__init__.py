@@ -27,7 +27,7 @@ SERVICE_GET_OVERDUE_ITEMS = "get_overdue_items"
 SERVICE_GET_DUE_ITEMS = "get_due_items"
 SERVICE_GET_ALL_ITEMS = "get_all_items"
 SERVICE_SET_LAST_MAINTENANCE = "set_last_maintenance"
-SERVICE_RELOAD_GLOBAL_SENSORS = "reload_global_sensors"
+
 
 # Схема для service set_last_maintenance
 SERVICE_SET_LAST_MAINTENANCE_SCHEMA = vol.Schema({
@@ -44,6 +44,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "config": entry.data,
         "entities": {},  # Хранилище для связи между сущностями
     }
+
+    # Устанавливаем флаг для создания глобальных сенсоров
+    if not hasattr(hass.data[DOMAIN], '_global_sensors_created'):
+        hass.data[DOMAIN]._global_sensors_created = False
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -64,7 +68,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_GET_DUE_ITEMS) 
             hass.services.async_remove(DOMAIN, SERVICE_GET_ALL_ITEMS)
             hass.services.async_remove(DOMAIN, SERVICE_SET_LAST_MAINTENANCE)
-            hass.services.async_remove(DOMAIN, SERVICE_RELOAD_GLOBAL_SENSORS)
 
     return unload_ok
 
@@ -172,27 +175,7 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.error(f"Entity {entity_id} does not support setting maintenance date")
 
-    async def async_reload_global_sensors(call: ServiceCall) -> None:
-        """Service для принудительного создания глобальных сенсоров."""
-        from . import global_sensor
-        
-        # Получаем первую запись интеграции для создания сенсоров
-        for entry_id in hass.data[DOMAIN]:
-            entry = hass.config_entries.async_get_entry(entry_id)
-            if entry:
-                # Создаем фиктивную функцию добавления сущностей
-                created_entities = []
-                
-                async def mock_add_entities(entities):
-                    created_entities.extend(entities)
-                    # Регистрируем сущности в платформе sensor
-                    platform = hass.data["entity_platform"]["sensor.maintainable"]
-                    for entity in entities:
-                        platform.async_add_entities([entity])
-                
-                await global_sensor.async_setup_entry(hass, entry, mock_add_entities)
-                _LOGGER.info(f"Created {len(created_entities)} global sensors")
-                break
+
 
     # Регистрируем services только если они еще не зарегистрированы
     if not hass.services.has_service(DOMAIN, SERVICE_GET_OVERDUE_ITEMS):
@@ -227,12 +210,7 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
             schema=SERVICE_SET_LAST_MAINTENANCE_SCHEMA,
         )
 
-    if not hass.services.has_service(DOMAIN, SERVICE_RELOAD_GLOBAL_SENSORS):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_RELOAD_GLOBAL_SENSORS,
-            async_reload_global_sensors,
-        )
+
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -85,10 +85,6 @@
           "description": "The date when the component was last maintained"
         }
       }
-    },
-    "reload_global_sensors": {
-      "name": "Reload Global Sensors",
-      "description": "Force creation of global maintenance count sensors"
     }
   }
 } 

@@ -31,7 +31,4 @@ set_last_maintenance:
       selector:
         date:
 
-reload_global_sensors:
-  name: Reload Global Sensors
-  description: Force creation of global maintenance count sensors
-  fields: {} 
+ 

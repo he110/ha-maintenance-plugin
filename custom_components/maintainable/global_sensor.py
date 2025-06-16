@@ -22,30 +22,20 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Настройка глобальных сенсоров подсчета."""
-    # Проверяем, есть ли уже созданные глобальные сенсоры в реестре сущностей
-    entity_registry = er.async_get(hass)
-    
-    overdue_exists = entity_registry.async_get_entity_id(
-        "sensor", DOMAIN, f"{DOMAIN}_overdue_count"
-    )
-    due_exists = entity_registry.async_get_entity_id(
-        "sensor", DOMAIN, f"{DOMAIN}_due_count"
-    )
-    
-    # Создаем только те сенсоры, которых еще нет
-    entities = []
-    if not overdue_exists:
-        entities.append(MaintenanceOverdueCountSensor(hass))
-        _LOGGER.debug("Creating maintenance overdue count sensor")
-    
-    if not due_exists:
-        entities.append(MaintenanceDueCountSensor(hass))
-        _LOGGER.debug("Creating maintenance due count sensor")
-    
-    if entities:
+    # Создаем глобальные сенсоры только один раз для всей интеграции
+    # Проверяем, есть ли уже данные о том, что глобальные сенсоры созданы
+    if not hasattr(hass.data[DOMAIN], '_global_sensors_created'):
+        hass.data[DOMAIN]._global_sensors_created = True
+        
+        entities = [
+            MaintenanceOverdueCountSensor(hass),
+            MaintenanceDueCountSensor(hass),
+        ]
+        
         async_add_entities(entities)
+        _LOGGER.info("Created global maintenance count sensors")
     else:
-        _LOGGER.debug("Global maintenance sensors already exist, skipping creation")
+        _LOGGER.debug("Global maintenance sensors already created, skipping")
 
 
 class MaintenanceCountSensor(SensorEntity):

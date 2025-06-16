@@ -30,8 +30,15 @@ async def async_setup_entry(
     
     async_add_entities(entities)
     
-    # Также настраиваем глобальные сенсоры подсчета
-    await global_sensor.async_setup_entry(hass, config_entry, async_add_entities)
+    # Настраиваем глобальные сенсоры подсчета только для первой записи
+    # Проверяем, сколько записей интеграции уже существует
+    maintainable_entries = [
+        entry for entry in hass.config_entries.async_entries(DOMAIN)
+    ]
+    
+    # Создаем глобальные сенсоры только для первой записи
+    if len(maintainable_entries) == 1 or config_entry == maintainable_entries[0]:
+        await global_sensor.async_setup_entry(hass, config_entry, async_add_entities)
 
 
 class MaintainableStatusSensor(MaintainableEntity, SensorEntity):

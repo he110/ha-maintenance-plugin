@@ -24,16 +24,16 @@ async def async_setup_entry(
     config = config_entry.data
     
     # Создаем сенсор для каждой записи конфигурации
-    async_add_entities([MaintainableSensor(config)], True)
+    async_add_entities([MaintainableSensor(config, config_entry.entry_id)], True)
 
 
 class MaintainableSensor(MaintainableEntity, SensorEntity):
     """Сенсор для отслеживания статуса обслуживания."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], entry_id: str) -> None:
         """Инициализация сенсора обслуживания."""
-        super().__init__(config)
-        self._attr_device_class = "timestamp"
+        super().__init__(config, entry_id)
+        self._attr_device_class = None
         self._attr_native_unit_of_measurement = None
 
     @property

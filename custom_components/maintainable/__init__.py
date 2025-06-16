@@ -24,7 +24,12 @@ SCAN_INTERVAL = timedelta(minutes=1)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Настройка интеграции из конфигурационной записи."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {}
+    
+    # Создаем общее хранилище для данных интеграции
+    hass.data[DOMAIN][entry.entry_id] = {
+        "entities": {},  # Для хранения ссылок на сущности
+        "config": entry.data,
+    }
 
     # Настройка платформ
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

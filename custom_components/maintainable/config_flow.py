@@ -10,27 +10,47 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from .const import (
-    CONF_DEVICE_CLASS,
+    CONF_DEVICE_ID,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
     DEFAULT_MAINTENANCE_INTERVAL,
     DEFAULT_NAME,
-    DEVICE_CLASSES,
     DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
-        vol.Required(CONF_MAINTENANCE_INTERVAL, default=DEFAULT_MAINTENANCE_INTERVAL): int,
-        vol.Required(CONF_DEVICE_CLASS, default="other"): vol.In(DEVICE_CLASSES),
-    }
-)
+
+def _get_device_options(hass: HomeAssistant) -> dict[str, str]:
+    """Получить список доступных устройств."""
+    device_registry = dr.async_get(hass)
+    devices = {}
+    
+    # Добавляем опцию "Без устройства"
+    devices[""] = "Без устройства"
+    
+    # Добавляем все доступные устройства
+    for device in device_registry.devices.values():
+        if device.name and not device.disabled:
+            devices[device.id] = device.name
+    
+    return devices
+
+
+def _get_step_user_schema(hass: HomeAssistant) -> vol.Schema:
+    """Получить схему для пользовательского ввода."""
+    device_options = _get_device_options(hass)
+    
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
+            vol.Required(CONF_MAINTENANCE_INTERVAL, default=DEFAULT_MAINTENANCE_INTERVAL): int,
+            vol.Optional(CONF_DEVICE_ID, default=""): vol.In(device_options),
+        }
+    )
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -44,7 +64,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Обработка шага пользовательского ввода."""
         if user_input is None:
             return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
+                step_id="user", data_schema=_get_step_user_schema(self.hass)
             )
 
         errors = {}
@@ -62,7 +82,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+            step_id="user", data_schema=_get_step_user_schema(self.hass), errors=errors
         )
 
 

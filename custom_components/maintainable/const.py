@@ -9,7 +9,7 @@ DOMAIN = "maintainable"
 CONF_NAME = "name"
 CONF_LAST_MAINTENANCE = "last_maintenance"
 CONF_MAINTENANCE_INTERVAL = "maintenance_interval"
-CONF_DEVICE_CLASS = "device_class"
+CONF_DEVICE_ID = "device_id"
 
 # Значения по умолчанию
 DEFAULT_NAME = "Обслуживаемый компонент"
@@ -28,23 +28,5 @@ ATTR_DAYS_REMAINING = "days_remaining"
 ATTR_MAINTENANCE_INTERVAL = "maintenance_interval_days"
 ATTR_STATUS = "status"
 
-# Типы устройств обслуживания
-DEVICE_CLASS_FILTER = "filter"
-DEVICE_CLASS_CONSUMABLE = "consumable"
-DEVICE_CLASS_PART = "part"
-DEVICE_CLASS_OTHER = "other"
-
-DEVICE_CLASSES = [
-    DEVICE_CLASS_FILTER,
-    DEVICE_CLASS_CONSUMABLE,
-    DEVICE_CLASS_PART,
-    DEVICE_CLASS_OTHER,
-]
-
-# Иконки для различных типов устройств
-DEVICE_CLASS_ICONS = {
-    DEVICE_CLASS_FILTER: "mdi:air-filter",
-    DEVICE_CLASS_CONSUMABLE: "mdi:package-variant",
-    DEVICE_CLASS_PART: "mdi:cog",
-    DEVICE_CLASS_OTHER: "mdi:wrench",
-} 
+# Иконка по умолчанию для обслуживаемых компонентов
+DEFAULT_ICON = "mdi:wrench" 

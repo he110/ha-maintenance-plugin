@@ -14,10 +14,10 @@ from .const import (
     ATTR_MAINTENANCE_INTERVAL,
     ATTR_NEXT_MAINTENANCE,
     ATTR_STATUS,
-    CONF_DEVICE_CLASS,
+    CONF_DEVICE_ID,
     CONF_MAINTENANCE_INTERVAL,
     CONF_NAME,
-    DEVICE_CLASS_ICONS,
+    DEFAULT_ICON,
     DOMAIN,
     STATE_DUE,
     STATE_OK,
@@ -28,28 +28,26 @@ from .const import (
 class MaintainableEntity(RestoreEntity):
     """Базовая сущность для обслуживаемых компонентов."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], entry_id: str) -> None:
         """Инициализация сущности обслуживаемого компонента."""
         self._attr_name = config[CONF_NAME]
         self._maintenance_interval = config[CONF_MAINTENANCE_INTERVAL]
-        self._device_class = config[CONF_DEVICE_CLASS]
+        self._device_id = config.get(CONF_DEVICE_ID)
         self._last_maintenance: datetime | None = None
-        self._attr_unique_id = f"{DOMAIN}_{self._attr_name.lower().replace(' ', '_')}"
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Информация об устройстве."""
-        return {
-            "identifiers": {(DOMAIN, self._attr_unique_id)},
-            "name": self._attr_name,
-            "manufacturer": "Maintainable",
-            "model": self._device_class.title(),
-        }
+        self._entry_id = entry_id
+        
+        # Создаем уникальный ID на основе entry_id для избежания конфликтов
+        clean_name = self._attr_name.lower().replace(' ', '_').replace('-', '_')
+        self._attr_unique_id = f"{DOMAIN}_{entry_id}_{clean_name}"
+        
+        # Если указано устройство, привязываем к нему
+        if self._device_id:
+            self._attr_device_id = self._device_id
 
     @property
     def icon(self) -> str:
         """Иконка сущности."""
-        return DEVICE_CLASS_ICONS.get(self._device_class, "mdi:wrench")
+        return DEFAULT_ICON
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -99,6 +97,10 @@ class MaintainableEntity(RestoreEntity):
         """Вызывается при добавлении сущности в Home Assistant."""
         await super().async_added_to_hass()
         
+        # Регистрируем сущность в общем хранилище
+        if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
+            self.hass.data[DOMAIN][self._entry_id]["entities"][self.entity_id] = self
+        
         # Восстанавливаем состояние из хранилища
         if (state := await self.async_get_last_state()) is not None:
             if last_maintenance_str := state.attributes.get(ATTR_LAST_MAINTENANCE):
@@ -113,4 +115,13 @@ class MaintainableEntity(RestoreEntity):
     def perform_maintenance(self) -> None:
         """Выполнить обслуживание - обновить дату последнего обслуживания."""
         self._last_maintenance = dt_util.now()
-        self.async_write_ha_state() 
+        self.async_write_ha_state()
+        
+        # Уведомляем все связанные сущности об изменении
+        if DOMAIN in self.hass.data and self._entry_id in self.hass.data[DOMAIN]:
+            entities = self.hass.data[DOMAIN][self._entry_id]["entities"]
+            for entity_id, entity in entities.items():
+                if entity != self:  # Не уведомляем себя
+                    # Обновляем данные связанной сущности
+                    entity._last_maintenance = self._last_maintenance
+                    entity.async_write_ha_state() 

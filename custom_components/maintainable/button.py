@@ -24,15 +24,15 @@ async def async_setup_entry(
     config = config_entry.data
     
     # Создаем кнопку для каждой записи конфигурации
-    async_add_entities([MaintenanceButton(config)], True)
+    async_add_entities([MaintenanceButton(config, config_entry.entry_id)], True)
 
 
 class MaintenanceButton(MaintainableEntity, ButtonEntity):
     """Кнопка для выполнения обслуживания."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], entry_id: str) -> None:
         """Инициализация кнопки обслуживания."""
-        super().__init__(config)
+        super().__init__(config, entry_id)
         self._attr_name = f"{self._attr_name} - Обслужить"
         self._attr_unique_id = f"{self._attr_unique_id}_button"
 
@@ -44,10 +44,5 @@ class MaintenanceButton(MaintainableEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Обработка нажатия кнопки."""
         _LOGGER.info("Выполнение обслуживания для %s", self._attr_name)
-        self.perform_maintenance()
-        
-        # Найдем соответствующий сенсор и обновим его состояние
-        sensor_entity_id = f"sensor.{self._attr_unique_id.replace('_button', '')}"
-        if sensor_entity := self.hass.states.get(sensor_entity_id):
-            # Попросим сенсор обновиться
-            await self.hass.helpers.entity_component.async_update_entity(sensor_entity_id) 
+        # Выполняем обслуживание, которое автоматически уведомит все связанные сущности
+        self.perform_maintenance() 

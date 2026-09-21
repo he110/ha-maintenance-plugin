@@ -323,7 +323,9 @@ async def test_survives_restart(hass: HomeAssistant, hass_storage, breather) -> 
     await hass.async_block_till_done()
 
     await hass.services.async_call(
-        "date", "set_value", {"entity_id": f"date.{SLUG}_last_maintenance", "date": "2026-03-26"},
+        "date",
+        "set_value",
+        {"entity_id": f"date.{SLUG}_last_maintenance", "date": "2026-03-26"},
         blocking=True,
     )
     flow = await hass.config_entries.options.async_init(entry.entry_id)

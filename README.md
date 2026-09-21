@@ -1,99 +1,109 @@
-# Maintainable - Home Assistant Integration
+# Maintainable for Home Assistant
 
-A Home Assistant integration for tracking components that require periodic maintenance.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![Validate](https://github.com/he110/ha-maintenance-plugin/actions/workflows/validate.yaml/badge.svg)](https://github.com/he110/ha-maintenance-plugin/actions/workflows/validate.yaml)
+[![Tests](https://github.com/he110/ha-maintenance-plugin/actions/workflows/tests.yaml/badge.svg)](https://github.com/he110/ha-maintenance-plugin/actions/workflows/tests.yaml)
+[![Release](https://img.shields.io/github/v/release/he110/ha-maintenance-plugin)](https://github.com/he110/ha-maintenance-plugin/releases)
 
-## Description
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=he110&repository=ha-maintenance-plugin&category=integration)
+[![Open your Home Assistant instance and add a maintained component.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=maintainable)
 
-The **Maintainable** integration allows you to easily track objects that need periodic maintenance, such as:
-- Water filters
-- Air purifier and air conditioner filters  
-- Robot vacuum consumables
-- Any other components requiring replacement or servicing
+Reminders for things that need periodic care but cannot tell you themselves: water filter
+cartridges, air purifier filters, vacuum brushes, a descaling, a car service.
 
-![example](images/device_sensors.png)
+When something is due, it shows up in **Settings → Repairs** — the same place Home Assistant
+uses for its own warnings — and you mark it done right there.
 
-## Features
+[Русская версия](README.ru.md)
 
-- **Maintenance tracking** - Set maintenance intervals in days
-- **Automatic status updates** - OK, Due, Overdue with automatic daily recalculation
-- **One-click maintenance** - Simple button to update maintenance date
-- **Persistent state** - Data persists across Home Assistant restarts
-- **Device linking** - Attach to existing devices in your system
-- **Initial date setup** - Set when components were last serviced
-- **Event system** - Automatic events for status changes and maintenance completion
-- **Configurable updates** - Customizable auto-update intervals (5 minutes to 24 hours)
-- **Smart notifications** - Optional event notifications with automation support
-- **Advanced validation** - Comprehensive data validation and error handling
-- **Built-in services** - Get lists of components by status for automations
-- **Global counters** - Built-in sensors showing total overdue/due components
-- **Multi-language support** - English and Russian localization
+## What you get
+
+For each component:
+
+| Entity | |
+|---|---|
+| `sensor.<name>_m_status` | `ok` / `due` / `overdue` |
+| `sensor.<name>_m_days` | Days until maintenance, negative when overdue |
+| `sensor.<name>_next_maintenance` | Date of the next maintenance |
+| `date.<name>_last_maintenance` | Last maintenance — edit it right on the device page |
+| `button.<name>_maintenance_button` | Mark as maintained today |
+
+- **Repairs:** a warning when maintenance is due soon, an error when it is overdue. **Fix** asks
+  when it was done and starts the next period from that date. The issue disappears by itself.
+- **Link to a device:** show a filter on its purifier's page instead of as a separate device.
+- Status is recalculated at local midnight, in your Home Assistant time zone.
+- Interval, reminder lead time and device can be changed at any time.
 
 ## Installation
 
-### 🚀 HACS (Recommended)
+**HACS (recommended):** click **Open in HACS** above (or HACS → ⋮ → Custom repositories →
+`https://github.com/he110/ha-maintenance-plugin`, category *Integration*), install, restart Home Assistant.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=he110&repository=ha-maintenance-plugin)
+**Manual:** copy `custom_components/maintainable` into `config/custom_components/` and restart.
 
+## Adding a component
 
-1. Ensure you have [HACS](https://hacs.xyz/) installed
-2. Add this repository to HACS as a custom repository:
-   - Open HACS
-   - Go to **Integrations**
-   - Click the three dots in the top right corner
-   - Select **Custom repositories**
-   - Add this repository URL
-   - Select **Integration** category
-3. Find "Maintainable" in the HACS integrations list
-4. Install the integration
-5. **Restart Home Assistant** (especially important when updating!)
-6. Add the integration via Settings → Devices & Services → Add Integration → Maintainable
+Click **Add integration** above, or *Settings → Devices & services → Add integration → Maintainable*.
+One integration entry is one component.
 
-### 📁 Manual Installation
+| Field | |
+|---|---|
+| Name | e.g. "HEPA filter — bedroom purifier" |
+| Maintenance interval | How often, in days |
+| Remind in advance | Days before the due date when the status becomes `due` (default 7) |
+| Last maintenance | Leave empty for today |
+| Device | Optional: show the component on that device's page |
 
-1. Copy the `custom_components/maintainable` folder to your Home Assistant `custom_components` folder
-2. **Restart Home Assistant**
-3. Add the integration via Settings → Devices & Services → Add Integration → Maintainable
+Later: *Configure* changes the interval, the lead time and whether reminders go to Repairs;
+*Reconfigure* renames the component or moves it to another device. Entity IDs never change.
 
-## Usage
+## Automations
 
-1. Add a new maintenance component through the interface
-2. Specify the component name and maintenance interval
-3. Optionally set the last maintenance date
-4. Optionally link to an existing device
-5. The following entities will be created:
-   - Sensor showing maintenance status
-   - Button to perform maintenance
+Services (target any entity of the component):
 
-## Component States
-
-- **OK** - Maintenance not needed (more than 7 days remaining)
-- **DUE** - Maintenance needed soon (7 days or less)
-- **OVERDUE** - Maintenance is overdue
-
-## Events and Automation
-
-The integration automatically fires events that can be used in automations:
-
-- `maintainable_overdue` - When a component becomes overdue
-- `maintainable_due` - When a component needs maintenance soon
-- `maintainable_completed` - When maintenance is performed
-
-See [EVENTS.md](EVENTS.md) for detailed documentation and automation examples.
-
-## ⚠️ Important Notes
-
-**When updating the integration, a full Home Assistant restart is required** for configuration flow changes to take effect.
-
-## Planned Features
-
-- Lovelace "Maintenance Feed" widget
-- Maintenance notifications
-- Statistics and maintenance history
-
-## Support
-
-If you encounter issues, please check the [Troubleshooting Guide](TROUBLESHOOTING.md) or report issues on GitHub.
-
+```yaml
+action: maintainable.perform_maintenance      # done now
+target:
+  entity_id: sensor.hepa_filter_m_status
 ---
+action: maintainable.set_last_maintenance     # done on a given date
+target:
+  entity_id: sensor.hepa_filter_m_status
+data:
+  maintenance_date: "2026-09-19"
+```
 
-**Developed to simplify home automation maintenance tracking** 🏠 
+Events, fired when the status changes (not on every restart):
+
+| Event | Data |
+|---|---|
+| `maintainable_due` | `entity_id`, `component_name`, `days_until` |
+| `maintainable_overdue` | `entity_id`, `component_name`, `days_overdue` |
+| `maintainable_completed` | `entity_id`, `component_name`, `maintenance_date` |
+
+```yaml
+# Example: a phone notification when something becomes overdue.
+triggers:
+  - trigger: event
+    event_type: maintainable_overdue
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      message: "{{ trigger.event.data.component_name }} is overdue for maintenance"
+```
+
+## Upgrading from 1.x
+
+Nothing to do: entity IDs, states, attributes, services, events and history are kept. See the
+[changelog](CHANGELOG.md#200) for what changed and why.
+
+## Development
+
+```bash
+pip install -r requirements_test.txt
+pytest tests
+```
+
+## License
+
+[MIT](LICENSE)

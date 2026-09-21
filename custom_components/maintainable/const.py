@@ -1,32 +1,41 @@
-"""Константы для интеграции Maintainable."""
+"""Constants for Maintainable."""
+
 from __future__ import annotations
 
 from homeassistant.const import Platform
 
-# Основные константы
 DOMAIN = "maintainable"
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
+PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.DATE]
 
-# Ключи для хранения данных
-DATA_COORDINATOR = "coordinator"
+# Config entry data — keys and meaning unchanged since 1.x (downgrade-safe).
+CONF_NAME = "name"
+CONF_INTERVAL = "maintenance_interval"
+CONF_DEVICE_ID = "device_id"
+CONF_LAST_MAINTENANCE = "last_maintenance_date"
 
-# Состояния обслуживания
-MAINTENANCE_STATUS_OK = "ok"
-MAINTENANCE_STATUS_DUE = "due"
-MAINTENANCE_STATUS_OVERDUE = "overdue"
+# Options (added in 2.0).
+CONF_DUE_THRESHOLD = "due_threshold"
+CONF_REPAIRS = "create_repairs"
 
-# Пороги для статусов (в днях)
-DUE_THRESHOLD = 7  # За 7 дней до срока - статус "due"
+DEFAULT_INTERVAL = 30
+DEFAULT_DUE_THRESHOLD = 7  # the fixed threshold of 1.x
 
-# Суффиксы для сущностей
+# Storage: one store per component, key and format kept from 1.x.
+STORAGE_VERSION = 1
+STORAGE_KEY = "maintainable_data_{entry_id}"
+
+# unique_id suffixes — must never change: entity ids and history hang on them.
 STATUS_SUFFIX = "_m_status"
 DAYS_SUFFIX = "_m_days"
 BUTTON_SUFFIX = "_maintenance_button"
+NEXT_SUFFIX = "_m_next"  # 2.0
+LAST_SUFFIX = "_m_last"  # 2.0
 
-# События
-EVENT_MAINTENANCE_DUE = "maintainable_due"
-EVENT_MAINTENANCE_OVERDUE = "maintainable_overdue"
-EVENT_MAINTENANCE_COMPLETED = "maintainable_completed"
+# Bus events — names and payload keys kept from 1.x.
+EVENT_DUE = "maintainable_due"
+EVENT_OVERDUE = "maintainable_overdue"
+EVENT_COMPLETED = "maintainable_completed"
 
-# Конфигурация по умолчанию
-DEFAULT_MAINTENANCE_INTERVAL = 30  # дней 
+SERVICE_PERFORM = "perform_maintenance"
+SERVICE_SET_LAST = "set_last_maintenance"
+ATTR_MAINTENANCE_DATE = "maintenance_date"

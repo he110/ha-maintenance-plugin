@@ -1,13 +1,13 @@
 {
   "domain": "maintainable",
   "name": "Maintainable",
-  "codeowners": [],
+  "codeowners": ["@he110"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["repairs"],
   "documentation": "https://github.com/he110/ha-maintenance-plugin",
-  "integration_type": "device",
-  "iot_class": "local_polling",
+  "integration_type": "helper",
+  "iot_class": "calculated",
   "issue_tracker": "https://github.com/he110/ha-maintenance-plugin/issues",
   "requirements": [],
-  "version": "1.4.0"
-} 
+  "version": "2.0.0"
+}

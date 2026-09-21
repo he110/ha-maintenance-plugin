@@ -1,7 +1,15 @@
 {
   "config": {
     "step": {
-      "user": {
+      "reconfigure": {
+        "title": "Change the component",
+        "description": "Entity IDs stay the same after renaming.",
+        "data": {
+          "name": "Name",
+          "device_id": "Device"
+        }
+      },
+      "component": {
         "title": "Add a component to maintain",
         "description": "Something that needs regular care: a water filter, a vacuum brush, a car service. You will get a reminder in Repairs when it is due.",
         "data": {
@@ -18,12 +26,24 @@
           "device_id": "Optional. Shows the component on that device's page, e.g. a filter on the purifier."
         }
       },
-      "reconfigure": {
-        "title": "Change the component",
-        "description": "Entity IDs stay the same after renaming.",
+      "user": {
+        "title": "What to track?",
+        "menu_options": {
+          "component": "A component to maintain (filter, brush, service…)",
+          "battery": "Batteries of all devices"
+        }
+      },
+      "battery": {
+        "title": "Battery monitor",
+        "description": "Finds every device with a battery by itself — no per-device setup — and reports low ones in Repairs. New devices are picked up automatically.",
         "data": {
-          "name": "Name",
-          "device_id": "Device"
+          "warning_level": "Warn at or below",
+          "error_level": "Error at or below",
+          "exclude_integrations": "Ignore integrations",
+          "exclude_devices": "Ignore devices"
+        },
+        "data_description": {
+          "exclude_integrations": "Phones, tablets and watches (mobile_app) charge every day, so they are ignored by default."
         }
       }
     },
@@ -32,7 +52,9 @@
     },
     "abort": {
       "already_configured": "A component with this name already exists.",
-      "reconfigure_successful": "Component updated."
+      "reconfigure_successful": "Component updated.",
+      "use_options": "Use Configure to change the battery monitor.",
+      "battery_already_configured": "The battery monitor is already set up."
     }
   },
   "options": {
@@ -48,6 +70,19 @@
           "maintenance_interval": "How often, in days.",
           "due_threshold": "Days before the due date."
         }
+      },
+      "battery": {
+        "title": "Battery monitor",
+        "description": "Finds every device with a battery by itself — no per-device setup — and reports low ones in Repairs. New devices are picked up automatically.",
+        "data": {
+          "warning_level": "Warn at or below",
+          "error_level": "Error at or below",
+          "exclude_integrations": "Ignore integrations",
+          "exclude_devices": "Ignore devices"
+        },
+        "data_description": {
+          "exclude_integrations": "Phones, tablets and watches (mobile_app) charge every day, so they are ignored by default."
+        }
       }
     }
   },
@@ -59,6 +94,9 @@
           "due": "Due soon",
           "overdue": "Overdue"
         }
+      },
+      "low_batteries": {
+        "name": "Low batteries"
       }
     }
   },
@@ -96,6 +134,18 @@
           "not_loaded": "The component is not loaded. Enable it and try again."
         }
       }
+    },
+    "battery_low": {
+      "title": "{name}: battery low ({level}%)",
+      "description": "The battery of **{name}** is at {level}%. Replace or charge it soon.\n\nThe reminder disappears by itself once the level goes up."
+    },
+    "battery_empty": {
+      "title": "{name}: battery empty",
+      "description": "The battery of **{name}** is at {level}% — the device has probably stopped working. Replace or charge it."
+    },
+    "battery_low_flag": {
+      "title": "{name}: battery low",
+      "description": "**{name}** reports a low battery. Replace or charge it soon."
     }
   },
   "exceptions": {

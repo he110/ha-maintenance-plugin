@@ -11,6 +11,8 @@
 Reminders for things that need periodic care but cannot tell you themselves: water filter
 cartridges, air purifier filters, vacuum brushes, a descaling, a car service.
 
+It can also watch every battery in your home.
+
 When something is due, it shows up in **Settings → Repairs** — the same place Home Assistant
 uses for its own warnings — and you mark it done right there.
 
@@ -33,6 +35,20 @@ For each component:
 - **Link to a device:** show a filter on its purifier's page instead of as a separate device.
 - Status is recalculated at local midnight, in your Home Assistant time zone.
 - Interval, reminder lead time and device can be changed at any time.
+
+## Battery monitor
+
+Add it once: *Add integration → Maintainable → Batteries of all devices*. No per-device setup:
+it finds every battery in your home by itself, including devices added later, and reports
+low ones in Repairs — a **warning at 10 % or less**, an **error at 0 %**. The reminder goes away
+when the battery is replaced.
+
+- One reminder per device (its lowest battery). The percentage wins over a vendor "battery low"
+  flag, which only counts for devices that report no percentage.
+- Phones, tablets and watches (`mobile_app`) are ignored by default. *Configure* changes the
+  thresholds and excludes integrations or single devices.
+- `sensor.low_battery_devices` — how many devices need attention; the list is in its `devices`
+  attribute (name, level, severity, entity), handy for dashboards.
 
 ## Installation
 

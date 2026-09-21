@@ -6,12 +6,15 @@ import datetime as dt
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import DAYS_SUFFIX, NEXT_SUFFIX, STATUS_SUFFIX
+from .battery import BatteryMonitor
+from .const import DAYS_SUFFIX, DOMAIN, LOW_BATTERIES_SUFFIX, NEXT_SUFFIX, STATUS_SUFFIX
 from .coordinator import MaintainableConfigEntry, MaintenanceCoordinator, effective_interval
 from .entity import MaintainableEntity
 from .schedule import STATUS_DUE, STATUS_OK, STATUS_OVERDUE
@@ -22,6 +25,9 @@ async def async_setup_entry(
     entry: MaintainableConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    if isinstance(entry.runtime_data, BatteryMonitor):
+        async_add_entities([LowBatteriesSensor(hass, entry, entry.runtime_data)])
+        return
     coordinator = entry.runtime_data
     async_add_entities(
         [
@@ -130,3 +136,38 @@ class NextMaintenanceSensor(MaintainableEntity, SensorEntity):
     @property
     def native_value(self) -> dt.date:
         return dt_util.as_local(self.coordinator.data.next).date()
+
+
+class LowBatteriesSensor(SensorEntity):
+    """How many devices need a battery change or a charge; the list is in `devices`."""
+
+    _attr_should_poll = False
+    _attr_icon = "mdi:battery-alert-variant-outline"
+    _attr_has_entity_name = True
+    _attr_translation_key = "low_batteries"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, monitor: BatteryMonitor) -> None:
+        self._monitor = monitor
+        self._attr_unique_id = f"{entry.entry_id}{LOW_BATTERIES_SUFFIX}"
+        self.entity_id = "sensor.low_battery_devices"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            model="Battery monitor",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(self._monitor.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> int:
+        return len(self._monitor.low())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "devices": self._monitor.low(),
+            "warning_level": self._monitor.warning_level,
+            "error_level": self._monitor.error_level,
+        }

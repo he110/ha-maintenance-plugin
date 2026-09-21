@@ -313,3 +313,59 @@ async def test_remove_entry_cleans_up(hass: HomeAssistant, hass_storage, breathe
     await hass.async_block_till_done()
     assert ir.async_get(hass).async_get_issue(DOMAIN, ENTRY_ID) is None
     assert f"maintainable_data_{ENTRY_ID}" not in hass_storage
+
+
+async def test_survives_restart(hass: HomeAssistant, hass_storage, breather) -> None:
+    """Everything that matters is persisted; a restart changes nothing and fires nothing."""
+    events = async_capture_events(hass, "maintainable_due")
+    entry = legacy_entry(hass, hass_storage, breather.id, "2026-01-01T10:00:00")
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        "date", "set_value", {"entity_id": f"date.{SLUG}_last_maintenance", "date": "2026-03-26"},
+        blocking=True,
+    )
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"maintenance_interval": 180, "due_threshold": 3, "create_repairs": True}
+    )
+    await hass.async_block_till_done()
+    before = {e: hass.states.get(e) for e in (f"sensor.{SLUG}_m_status", f"sensor.{SLUG}_m_days")}
+    fired = len(events)
+
+    # Restart: unload everything (as on shutdown) and set up again from storage only.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    for entity_id, old in before.items():
+        new = hass.states.get(entity_id)
+        assert (new.state, new.attributes) == (old.state, old.attributes), entity_id
+    assert hass.states.get(f"date.{SLUG}_last_maintenance").state == "2026-03-26"
+    assert entry.options["due_threshold"] == 3
+    assert len(events) == fired  # no event just because of the restart
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ENTRY_ID) is not None  # reminder is back
+
+
+async def test_transition_while_ha_was_off_fires_once(
+    hass: HomeAssistant, hass_storage, breather, freezer
+) -> None:
+    """HA off over the day the status changed: the event comes once on the next start."""
+    overdue = async_capture_events(hass, "maintainable_overdue")
+    entry = legacy_entry(hass, hass_storage, breather.id, "2026-03-25T10:00:00")  # due today
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+    freezer.tick(dt.timedelta(days=2))  # ...HA is off; midnight passes unseen
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(f"sensor.{SLUG}_m_status").state == "overdue"
+    assert len(overdue) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(overdue) == 1  # not again

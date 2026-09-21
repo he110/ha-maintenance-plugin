@@ -261,6 +261,8 @@ async def test_options_change_interval_and_disable_repairs(
 
 async def test_new_component(hass: HomeAssistant) -> None:
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert flow["type"] is FlowResultType.MENU
+    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "component"})
     result = await hass.config_entries.flow.async_configure(
         flow["flow_id"],
         {
@@ -282,6 +284,7 @@ async def test_new_component(hass: HomeAssistant) -> None:
     assert dr.async_get(hass).async_get(device_id).name == "Water filter"
 
     again = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    again = await hass.config_entries.flow.async_configure(again["flow_id"], {"next_step_id": "component"})
     again = await hass.config_entries.flow.async_configure(
         again["flow_id"], {"name": "water filter", "maintenance_interval": 30, "due_threshold": 7}
     )

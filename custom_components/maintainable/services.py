@@ -35,7 +35,12 @@ def _coordinators(hass: HomeAssistant, entity_ids: list[str]) -> list[Maintenanc
         registry_entry = registry.async_get(entity_id)
         entry_id = registry_entry.config_entry_id if registry_entry else None
         entry = hass.config_entries.async_get_entry(entry_id) if entry_id else None
-        if entry is None or entry.domain != DOMAIN or entry.state is not ConfigEntryState.LOADED:
+        if (
+            entry is None
+            or entry.domain != DOMAIN
+            or entry.state is not ConfigEntryState.LOADED
+            or not isinstance(entry.runtime_data, MaintenanceCoordinator)
+        ):
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="not_maintainable",

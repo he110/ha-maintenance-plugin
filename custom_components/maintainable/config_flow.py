@@ -8,27 +8,42 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     BooleanSelector,
     DateSelector,
     DeviceSelector,
+    DeviceSelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
     TextSelector,
 )
 from homeassistant.util import dt as dt_util
 
+from .battery import is_battery
 from .const import (
+    BATTERY_UNIQUE_ID,
     CONF_DEVICE_ID,
     CONF_DUE_THRESHOLD,
+    CONF_ERROR_LEVEL,
+    CONF_EXCLUDE_DEVICES,
+    CONF_EXCLUDE_INTEGRATIONS,
     CONF_INTERVAL,
+    CONF_KIND,
     CONF_LAST_MAINTENANCE,
     CONF_NAME,
     CONF_REPAIRS,
+    CONF_WARNING_LEVEL,
     DEFAULT_DUE_THRESHOLD,
+    DEFAULT_ERROR_LEVEL,
+    DEFAULT_EXCLUDE_INTEGRATIONS,
     DEFAULT_INTERVAL,
+    DEFAULT_WARNING_LEVEL,
     DOMAIN,
+    KIND_BATTERY,
 )
 
 
@@ -50,6 +65,26 @@ class MaintainableConfigFlow(ConfigFlow, domain=DOMAIN):
     MINOR_VERSION = 2
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        return self.async_show_menu(step_id="user", menu_options=["component", "battery"])
+
+    async def async_step_battery(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """One battery monitor per home: it finds every battery by itself."""
+        if any(e.unique_id == BATTERY_UNIQUE_ID for e in self._async_current_entries()):
+            return self.async_abort(reason="battery_already_configured")
+        await self.async_set_unique_id(BATTERY_UNIQUE_ID)
+        if user_input is not None:
+            russian = self.hass.config.language.startswith("ru")
+            return self.async_create_entry(
+                title="Контроль батарей" if russian else "Battery monitor",
+                data={CONF_KIND: KIND_BATTERY},
+                options=_battery_options(user_input),
+            )
+        return self.async_show_form(
+            step_id="battery",
+            data_schema=self.add_suggested_values_to_schema(_battery_schema(self.hass), _battery_defaults()),
+        )
+
+    async def async_step_component(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             name = user_input[CONF_NAME].strip()
@@ -89,7 +124,7 @@ class MaintainableConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(
-            step_id="user",
+            step_id="component",
             data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
@@ -100,6 +135,8 @@ class MaintainableConfigFlow(ConfigFlow, domain=DOMAIN):
         Entity ids stay as they are: they live in the entity registry.
         """
         entry = self._get_reconfigure_entry()
+        if entry.data.get(CONF_KIND) == KIND_BATTERY:
+            return self.async_abort(reason="use_options")
         errors: dict[str, str] = {}
         if user_input is not None:
             name = user_input[CONF_NAME].strip()
@@ -131,6 +168,8 @@ class MaintainableConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class MaintainableOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if self.config_entry.data.get(CONF_KIND) == KIND_BATTERY:
+            return await self.async_step_battery()
         if user_input is not None:
             return self.async_create_entry(
                 data={
@@ -155,3 +194,53 @@ class MaintainableOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init", data_schema=self.add_suggested_values_to_schema(schema, current)
         )
+
+    async def async_step_battery(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=_battery_options(user_input))
+        return self.async_show_form(
+            step_id="battery",
+            data_schema=self.add_suggested_values_to_schema(
+                _battery_schema(self.hass), {**_battery_defaults(), **self.config_entry.options}
+            ),
+        )
+
+
+def _battery_defaults() -> dict[str, Any]:
+    return {
+        CONF_WARNING_LEVEL: DEFAULT_WARNING_LEVEL,
+        CONF_ERROR_LEVEL: DEFAULT_ERROR_LEVEL,
+        CONF_EXCLUDE_INTEGRATIONS: DEFAULT_EXCLUDE_INTEGRATIONS,
+        CONF_EXCLUDE_DEVICES: [],
+    }
+
+
+def _battery_options(user_input: dict[str, Any]) -> dict[str, Any]:
+    return {
+        CONF_WARNING_LEVEL: int(user_input[CONF_WARNING_LEVEL]),
+        CONF_ERROR_LEVEL: int(user_input[CONF_ERROR_LEVEL]),
+        CONF_EXCLUDE_INTEGRATIONS: list(user_input.get(CONF_EXCLUDE_INTEGRATIONS, [])),
+        CONF_EXCLUDE_DEVICES: list(user_input.get(CONF_EXCLUDE_DEVICES, [])),
+    }
+
+
+def _battery_schema(hass) -> vol.Schema:
+    """Integrations offered for exclusion: those that actually have batteries here."""
+    registry = er.async_get(hass)
+    domains = set(DEFAULT_EXCLUDE_INTEGRATIONS)
+    for state in hass.states.async_all(("sensor", "binary_sensor")):
+        if is_battery(state) and (entry := registry.async_get(state.entity_id)):
+            domains.add(entry.platform)
+    percent = NumberSelector(
+        NumberSelectorConfig(min=0, max=100, mode=NumberSelectorMode.BOX, unit_of_measurement="%")
+    )
+    return vol.Schema(
+        {
+            vol.Required(CONF_WARNING_LEVEL): percent,
+            vol.Required(CONF_ERROR_LEVEL): percent,
+            vol.Optional(CONF_EXCLUDE_INTEGRATIONS): SelectSelector(
+                SelectSelectorConfig(options=sorted(domains), multiple=True, custom_value=True)
+            ),
+            vol.Optional(CONF_EXCLUDE_DEVICES): DeviceSelector(DeviceSelectorConfig(multiple=True)),
+        }
+    )

@@ -39,3 +39,17 @@ EVENT_COMPLETED = "maintainable_completed"
 SERVICE_PERFORM = "perform_maintenance"
 SERVICE_SET_LAST = "set_last_maintenance"
 ATTR_MAINTENANCE_DATE = "maintenance_date"
+
+# Battery monitor (2.1): one config entry for the whole home.
+CONF_KIND = "kind"
+KIND_BATTERY = "battery_monitor"
+BATTERY_UNIQUE_ID = "battery_monitor"
+CONF_WARNING_LEVEL = "warning_level"
+CONF_ERROR_LEVEL = "error_level"
+CONF_EXCLUDE_INTEGRATIONS = "exclude_integrations"
+CONF_EXCLUDE_DEVICES = "exclude_devices"
+DEFAULT_WARNING_LEVEL = 10
+DEFAULT_ERROR_LEVEL = 0
+# Phones, tablets and watches run down every day — reminders about them are noise.
+DEFAULT_EXCLUDE_INTEGRATIONS = ["mobile_app"]
+LOW_BATTERIES_SUFFIX = "_low_batteries"

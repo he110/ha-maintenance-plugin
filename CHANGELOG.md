@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0
+
+- **Battery monitor.** Add it once (*Add integration → Maintainable → Batteries of all devices*):
+  it finds every device with a battery by itself and reports low ones in Repairs — a warning at
+  10 % or less, an error at 0 % (both adjustable). New devices are picked up automatically, the
+  reminder disappears when the battery is replaced.
+  - One reminder per device, based on its lowest battery; the percentage wins over a vendor
+    "battery low" flag, which is used only by devices without a percentage.
+  - Phones, tablets and watches (`mobile_app`) are ignored by default; any integration or device
+    can be excluded.
+  - `sensor.low_battery_devices`: how many devices need attention, with the list in `devices`.
+- Adding Maintainable now starts with a choice: a component to maintain or the battery monitor.
+
 ## 2.0.0
 
 A rewrite focused on how it feels to use, fully compatible with existing setups.

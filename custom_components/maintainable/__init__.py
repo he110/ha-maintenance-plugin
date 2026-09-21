@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
+from .battery import BatteryMonitor
 from .const import (
     CONF_DUE_THRESHOLD,
     CONF_INTERVAL,
+    CONF_KIND,
     CONF_REPAIRS,
     DEFAULT_DUE_THRESHOLD,
     DOMAIN,
+    KIND_BATTERY,
     PLATFORMS,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -27,6 +31,7 @@ from .services import async_register_services
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+BATTERY_PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -41,7 +46,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: MaintainableConfigEntr
     """
     if entry.version > 1:
         return False
-    if entry.minor_version < 2:
+    if entry.minor_version < 2 and not _is_battery_monitor(entry):
         store = Store(hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id))
         stored = await store.async_load() or {}
         # 1.x read the interval from its store (copied there on first run).
@@ -59,7 +64,19 @@ async def async_migrate_entry(hass: HomeAssistant, entry: MaintainableConfigEntr
     return True
 
 
+def _is_battery_monitor(entry: MaintainableConfigEntry) -> bool:
+    return entry.data.get(CONF_KIND) == KIND_BATTERY
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: MaintainableConfigEntry) -> bool:
+    if _is_battery_monitor(entry):
+        monitor = BatteryMonitor(hass, entry)
+        monitor.async_start()
+        entry.runtime_data = monitor
+        entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+        await hass.config_entries.async_forward_entry_setups(entry, BATTERY_PLATFORMS)
+        return True
+
     # Before the update listener exists: fixing the stored device id must not reload.
     async_relink(hass, entry)
     coordinator = MaintenanceCoordinator(hass, entry)
@@ -77,6 +94,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: MaintainableConfigEntry)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MaintainableConfigEntry) -> bool:
+    if _is_battery_monitor(entry):
+        unloaded = await hass.config_entries.async_unload_platforms(entry, BATTERY_PLATFORMS)
+        if unloaded:
+            entry.runtime_data.async_stop()
+        return unloaded
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         # A disabled or removed component must not keep nagging in Repairs.
@@ -85,6 +107,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: MaintainableConfigEntry
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MaintainableConfigEntry) -> None:
+    if _is_battery_monitor(entry):
+        return
     await Store(hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)).async_remove()
 
 

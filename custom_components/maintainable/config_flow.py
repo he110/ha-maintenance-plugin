@@ -1,175 +1,157 @@
-"""Поток конфигурации для интеграции Maintainable."""
+"""Config flow: add a component, reconfigure it, options."""
+
 from __future__ import annotations
 
-import logging
+import datetime as dt
 from typing import Any
-from datetime import datetime
 
 import voluptuous as vol
-
-from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import device_registry as dr
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
+    DateSelector,
     DeviceSelector,
-    DeviceSelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
     TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-    DateSelector,
-    DateSelectorConfig,
+)
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_DUE_THRESHOLD,
+    CONF_INTERVAL,
+    CONF_LAST_MAINTENANCE,
+    CONF_NAME,
+    CONF_REPAIRS,
+    DEFAULT_DUE_THRESHOLD,
+    DEFAULT_INTERVAL,
+    DOMAIN,
 )
 
-from .const import DOMAIN, DEFAULT_MAINTENANCE_INTERVAL
 
-_LOGGER = logging.getLogger(__name__)
+def _days(minimum: int) -> NumberSelector:
+    return NumberSelector(
+        NumberSelectorConfig(min=minimum, max=3650, mode=NumberSelectorMode.BOX, unit_of_measurement="d")
+    )
 
 
-class MaintenableConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Обработка потока конфигурации для Maintainable."""
+def _legacy_unique_id(name: str) -> str:
+    # Same formula as 1.x, so duplicates of existing components are still detected.
+    return f"{DOMAIN}_{name.lower().replace(' ', '_')}"
+
+
+class MaintainableConfigFlow(ConfigFlow, domain=DOMAIN):
+    """One entry per maintained component."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Обработка начального шага конфигурации."""
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-
         if user_input is not None:
-            try:
-                # Проверяем корректность входных данных
-                name = user_input["name"].strip()
-                maintenance_interval = user_input["maintenance_interval"]
-                
-                if not name:
-                    errors["name"] = "invalid_name"
-                elif maintenance_interval <= 0:
-                    errors["maintenance_interval"] = "invalid_interval"
-                else:
-                    # Создаём уникальный ID для этого компонента
-                    unique_id = f"{DOMAIN}_{name.lower().replace(' ', '_')}"
-                    
-                    await self.async_set_unique_id(unique_id)
-                    self._abort_if_unique_id_configured()
-
-                    # Обрабатываем дату последнего обслуживания
-                    last_maintenance_date = user_input.get("last_maintenance_date")
-                    if last_maintenance_date:
-                        _LOGGER.info("Получена дата последнего обслуживания: %s (тип: %s)", last_maintenance_date, type(last_maintenance_date))
-                        
-                        # Обрабатываем разные типы входных данных
-                        if hasattr(last_maintenance_date, 'date') and callable(getattr(last_maintenance_date, 'date')):
-                            # Это объект datetime
-                            last_maintenance_str = last_maintenance_date.isoformat()
-                        elif hasattr(last_maintenance_date, 'isoformat'):
-                            # Это объект date
-                            last_maintenance_datetime = datetime.combine(last_maintenance_date, datetime.min.time())
-                            last_maintenance_str = last_maintenance_datetime.isoformat()
-                        elif isinstance(last_maintenance_date, str):
-                            # Строка - пытаемся парсить
-                            try:
-                                parsed_datetime = datetime.fromisoformat(last_maintenance_date)
-                                last_maintenance_str = parsed_datetime.isoformat()
-                            except ValueError:
-                                try:
-                                    from datetime import date
-                                    parsed_date = date.fromisoformat(last_maintenance_date)
-                                    parsed_datetime = datetime.combine(parsed_date, datetime.min.time())
-                                    last_maintenance_str = parsed_datetime.isoformat()
-                                except ValueError:
-                                    _LOGGER.error("Не удалось распарсить дату: %s", last_maintenance_date)
-                                    last_maintenance_str = datetime.now().isoformat()
-                        else:
-                            _LOGGER.warning("Неизвестный тип даты: %s", type(last_maintenance_date))
-                            last_maintenance_str = datetime.now().isoformat()
-                    else:
-                        last_maintenance_str = datetime.now().isoformat()
-                    
-                    _LOGGER.info("Сохраняем дату последнего обслуживания: %s", last_maintenance_str)
-
-                    # Логируем device_id для диагностики
-                    device_id = user_input.get("device_id")
-                    _LOGGER.info("Device ID выбран: %s (тип: %s)", device_id, type(device_id))
-
-                    return self.async_create_entry(
-                        title=name,
-                        data={
-                            "name": name,
-                            "maintenance_interval": maintenance_interval,
-                            "device_id": user_input.get("device_id"),
-                            "last_maintenance_date": last_maintenance_str,
-                        },
-                    )
-                    
-            except Exception as ex:
-                _LOGGER.error("Ошибка при настройке: %s", ex)
-                errors["base"] = "unknown"
-
-        # Получаем список устройств для селектора
-        device_registry = dr.async_get(self.hass)
-        devices = list(device_registry.devices.values())
-        
-        # Создаём схему для формы
-        data_schema = vol.Schema({
-            vol.Required("name"): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT)
-            ),
-            vol.Required("maintenance_interval", default=DEFAULT_MAINTENANCE_INTERVAL): 
-                NumberSelector(
-                    NumberSelectorConfig(
-                        mode=NumberSelectorMode.BOX,
-                        min=1,
-                        unit_of_measurement="дней"
-                    )
-                ),
-            vol.Optional("last_maintenance_date"): DateSelector(
-                DateSelectorConfig()
-            ),
-            vol.Optional("device_id"): DeviceSelector(
-                DeviceSelectorConfig()
-            ),
-        })
-
+            name = user_input[CONF_NAME].strip()
+            if not name:
+                errors[CONF_NAME] = "invalid_name"
+            else:
+                await self.async_set_unique_id(_legacy_unique_id(name))
+                self._abort_if_unique_id_configured()
+                last = user_input.get(CONF_LAST_MAINTENANCE)
+                last_iso = (
+                    dt_util.start_of_local_day(dt.date.fromisoformat(last)).isoformat()
+                    if last
+                    else dt_util.now().isoformat()
+                )
+                return self.async_create_entry(
+                    title=name,
+                    # 1.x data keys, so that a downgrade can still read the entry.
+                    data={
+                        CONF_NAME: name,
+                        CONF_INTERVAL: int(user_input[CONF_INTERVAL]),
+                        CONF_DEVICE_ID: user_input.get(CONF_DEVICE_ID),
+                        CONF_LAST_MAINTENANCE: last_iso,
+                    },
+                    options={
+                        CONF_INTERVAL: int(user_input[CONF_INTERVAL]),
+                        CONF_DUE_THRESHOLD: int(user_input[CONF_DUE_THRESHOLD]),
+                        CONF_REPAIRS: True,
+                    },
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): TextSelector(),
+                vol.Required(CONF_INTERVAL, default=DEFAULT_INTERVAL): _days(1),
+                vol.Required(CONF_DUE_THRESHOLD, default=DEFAULT_DUE_THRESHOLD): _days(0),
+                vol.Optional(CONF_LAST_MAINTENANCE): DateSelector(),
+                vol.Optional(CONF_DEVICE_ID): DeviceSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Rename the component or change the device it belongs to.
+
+        Entity ids stay as they are: they live in the entity registry.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = user_input[CONF_NAME].strip()
+            if not name:
+                errors[CONF_NAME] = "invalid_name"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    title=name,
+                    data_updates={CONF_NAME: name, CONF_DEVICE_ID: user_input.get(CONF_DEVICE_ID)},
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): TextSelector(),
+                vol.Optional(CONF_DEVICE_ID): DeviceSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or dict(entry.data)),
             errors=errors,
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> MaintenableOptionsFlowHandler:
-        """Создать поток настройки опций."""
-        return MaintenableOptionsFlowHandler(config_entry)
+    def async_get_options_flow(config_entry: ConfigEntry) -> MaintainableOptionsFlow:
+        return MaintainableOptionsFlow()
 
 
-class MaintenableOptionsFlowHandler(config_entries.OptionsFlow):
-    """Обработка опций для Maintainable."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Инициализация обработчика опций."""
-        self.config_entry = config_entry
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Управление опциями."""
+class MaintainableOptionsFlow(OptionsFlow):
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
+            return self.async_create_entry(
+                data={
+                    CONF_INTERVAL: int(user_input[CONF_INTERVAL]),
+                    CONF_DUE_THRESHOLD: int(user_input[CONF_DUE_THRESHOLD]),
+                    CONF_REPAIRS: user_input[CONF_REPAIRS],
+                }
+            )
+        entry = self.config_entry
+        current = {
+            CONF_INTERVAL: entry.options.get(CONF_INTERVAL, entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)),
+            CONF_DUE_THRESHOLD: entry.options.get(CONF_DUE_THRESHOLD, DEFAULT_DUE_THRESHOLD),
+            CONF_REPAIRS: entry.options.get(CONF_REPAIRS, True),
+        }
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_INTERVAL): _days(1),
+                vol.Required(CONF_DUE_THRESHOLD): _days(0),
+                vol.Required(CONF_REPAIRS): BooleanSelector(),
+            }
+        )
         return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({
-                vol.Optional(
-                    "enable_notifications",
-                    default=self.config_entry.options.get("enable_notifications", False),
-                ): bool,
-            }),
-        ) 
+            step_id="init", data_schema=self.add_suggested_values_to_schema(schema, current)
+        )

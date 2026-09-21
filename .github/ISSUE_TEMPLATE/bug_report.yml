@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+    validations:
+      required: true
+  - type: input
+    id: upgraded
+    attributes:
+      label: Upgraded from 1.x?
+      description: If yes, from which version.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: With `logger: logs: custom_components.maintainable: debug` enabled.
+      render: text

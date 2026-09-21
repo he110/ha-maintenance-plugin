@@ -1,176 +1,181 @@
-"""Координатор данных для интеграции Maintainable."""
+"""State of one maintained component: storage, schedule, events, Repairs issue."""
+
 from __future__ import annotations
 
+import datetime as dt
 import logging
-from datetime import datetime, date, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_DUE_THRESHOLD,
+    CONF_INTERVAL,
+    CONF_LAST_MAINTENANCE,
+    CONF_NAME,
+    CONF_REPAIRS,
+    DEFAULT_DUE_THRESHOLD,
+    DEFAULT_INTERVAL,
     DOMAIN,
-    MAINTENANCE_STATUS_OK,
-    MAINTENANCE_STATUS_DUE,
-    MAINTENANCE_STATUS_OVERDUE,
-    DUE_THRESHOLD,
-    EVENT_MAINTENANCE_DUE,
-    EVENT_MAINTENANCE_OVERDUE,
-    EVENT_MAINTENANCE_COMPLETED,
+    EVENT_COMPLETED,
+    EVENT_DUE,
+    EVENT_OVERDUE,
+    STATUS_SUFFIX,
+    STORAGE_KEY,
+    STORAGE_VERSION,
 )
+from .schedule import STATUS_DUE, STATUS_OVERDUE, Schedule, compute, parse_stored
 
 _LOGGER = logging.getLogger(__name__)
 
-STORAGE_VERSION = 1
-STORAGE_KEY = f"{DOMAIN}_data"
+type MaintainableConfigEntry = ConfigEntry[MaintenanceCoordinator]
 
 
-class MaintenanceCoordinator(DataUpdateCoordinator):
-    """Координатор для управления данными обслуживания."""
+def effective_interval(entry: ConfigEntry) -> int:
+    return int(entry.options.get(CONF_INTERVAL, entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)))
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Инициализация координатора."""
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            update_interval=timedelta(hours=1),  # Обновление каждый час
-        )
+
+class MaintenanceCoordinator(DataUpdateCoordinator[Schedule]):
+    """No polling: recomputed at local midnight and whenever the date changes."""
+
+    def __init__(self, hass: HomeAssistant, entry: MaintainableConfigEntry) -> None:
+        super().__init__(hass, _LOGGER, name=f"{DOMAIN} {entry.title}", config_entry=entry)
         self.entry = entry
-        self.store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
-        self._data: dict[str, Any] = {}
-        self._previous_status: dict[str, str] = {}
+        self._store: Store[dict[str, Any]] = Store(
+            hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)
+        )
+        self._stored: dict[str, Any] = {}
 
-    async def _async_update_data(self) -> dict[str, Any]:
-        """Обновление данных."""
-        try:
-            # Загружаем сохранённые данные
-            stored_data = await self.store.async_load()
-            if stored_data is None:
-                # При первом запуске используем дату из конфигурации или текущую
-                last_maintenance_date = self.entry.data.get("last_maintenance_date")
-                if not last_maintenance_date:
-                    last_maintenance_date = datetime.now().isoformat()
-                
-                stored_data = {
-                    "last_maintenance_date": last_maintenance_date,
-                    "maintenance_interval": self.entry.data.get("maintenance_interval", 30),
-                    "name": self.entry.data.get("name", "Компонент"),
-                }
-                
-                # Сохраняем начальные данные
-                await self.store.async_save(stored_data)
-                
-                _LOGGER.info("Создан новый компонент: %s, дата последнего обслуживания: %s", 
-                           stored_data["name"], last_maintenance_date)
+    @property
+    def name_(self) -> str:
+        return self.entry.data.get(CONF_NAME, self.entry.title)
 
-            # Вычисляем текущий статус
-            last_maintenance = datetime.fromisoformat(stored_data["last_maintenance_date"])
-            interval = stored_data["maintenance_interval"]
-            now = datetime.now()
-            
-            next_maintenance = last_maintenance + timedelta(days=interval)
-            days_until_maintenance = (next_maintenance.date() - now.date()).days
-            
-            _LOGGER.debug("Компонент %s: последнее обслуживание %s, интервал %d дней, дней до обслуживания: %d", 
-                         stored_data["name"], last_maintenance.date(), interval, days_until_maintenance)
-            
-            # Определяем статус
-            if days_until_maintenance < 0:
-                status = MAINTENANCE_STATUS_OVERDUE
-            elif days_until_maintenance <= DUE_THRESHOLD:
-                status = MAINTENANCE_STATUS_DUE
-            else:
-                status = MAINTENANCE_STATUS_OK
-
-            # Проверяем изменение статуса и отправляем события
-            entry_id = self.entry.entry_id
-            previous_status = self._previous_status.get(entry_id)
-            
-            if previous_status != status:
-                component_name = stored_data.get("name", "Компонент")
-                
-                if status == MAINTENANCE_STATUS_DUE and previous_status != MAINTENANCE_STATUS_DUE:
-                    self.hass.bus.async_fire(EVENT_MAINTENANCE_DUE, {
-                        "entity_id": f"sensor.{component_name.lower().replace(' ', '_')}_m_status",
-                        "component_name": component_name,
-                        "days_until": days_until_maintenance,
-                    })
-                elif status == MAINTENANCE_STATUS_OVERDUE and previous_status != MAINTENANCE_STATUS_OVERDUE:
-                    self.hass.bus.async_fire(EVENT_MAINTENANCE_OVERDUE, {
-                        "entity_id": f"sensor.{component_name.lower().replace(' ', '_')}_m_status", 
-                        "component_name": component_name,
-                        "days_overdue": abs(days_until_maintenance),
-                    })
-                
-                self._previous_status[entry_id] = status
-
-            return {
-                "status": status,
-                "days_until_maintenance": days_until_maintenance,
-                "last_maintenance_date": stored_data["last_maintenance_date"],
-                "maintenance_interval": stored_data["maintenance_interval"],
-                "name": stored_data["name"],
-                "next_maintenance_date": next_maintenance.isoformat(),
+    async def async_load(self) -> None:
+        stored = await self._store.async_load()
+        if stored is None:
+            # Same first-run behaviour as 1.x: date from the config flow, else now.
+            stored = {
+                "last_maintenance_date": self.entry.data.get(CONF_LAST_MAINTENANCE)
+                or dt_util.now().isoformat(),
+                "name": self.name_,
             }
+        self._stored = stored
+        await self._save()
+        self._recompute()
 
-        except Exception as err:
-            raise UpdateFailed(f"Ошибка обновления данных: {err}") from err
+    async def _save(self) -> None:
+        # Keep the 1.x fields in sync so that a downgrade keeps working.
+        self._stored["maintenance_interval"] = effective_interval(self.entry)
+        self._stored["name"] = self.name_
+        await self._store.async_save(self._stored)
 
-    async def async_perform_maintenance(self) -> None:
-        """Выполнить обслуживание - установить текущую дату как дату последнего обслуживания."""
-        try:
-            # Загружаем текущие данные
-            stored_data = await self.store.async_load()
-            if stored_data is None:
-                stored_data = {}
+    @property
+    def last_maintenance(self) -> dt.datetime:
+        return parse_stored(self._stored["last_maintenance_date"], dt_util.get_default_time_zone())
 
-            # Обновляем дату последнего обслуживания
-            stored_data["last_maintenance_date"] = datetime.now().isoformat()
-            
-            # Сохраняем
-            await self.store.async_save(stored_data)
-            
-            # Отправляем событие о выполненном обслуживании
-            component_name = stored_data.get("name", "Компонент")
-            self.hass.bus.async_fire(EVENT_MAINTENANCE_COMPLETED, {
-                "entity_id": f"sensor.{component_name.lower().replace(' ', '_')}_m_status",
-                "component_name": component_name,
-                "maintenance_date": stored_data["last_maintenance_date"],
-            })
-            
-            # Обновляем данные
-            await self.async_request_refresh()
-            
-            _LOGGER.info("Обслуживание выполнено для %s", component_name)
+    def _recompute(self) -> None:
+        options = self.entry.options
+        schedule = compute(
+            self.last_maintenance,
+            effective_interval(self.entry),
+            int(options.get(CONF_DUE_THRESHOLD, DEFAULT_DUE_THRESHOLD)),
+            dt_util.now().date(),
+            dt_util.get_default_time_zone(),
+        )
+        previous = self._stored.get("last_status")
+        if previous is None:
+            # First run on 2.x: remember the status silently. 1.x fired due/overdue
+            # after every restart; 2.x only fires on real transitions.
+            self._stored["last_status"] = schedule.status
+            self.hass.async_create_task(self._save(), eager_start=True)
+        elif previous != schedule.status:
+            self._stored["last_status"] = schedule.status
+            self.hass.async_create_task(self._save(), eager_start=True)
+            self._fire_transition(schedule)
+        self._sync_issue(schedule)
+        self.async_set_updated_data(schedule)
 
-        except Exception as err:
-            _LOGGER.error("Ошибка при выполнении обслуживания: %s", err)
-            raise
+    @property
+    def status_entity_id(self) -> str | None:
+        return er.async_get(self.hass).async_get_entity_id(
+            "sensor", DOMAIN, f"{self.entry.entry_id}{STATUS_SUFFIX}"
+        )
 
-    async def async_set_maintenance_date(self, maintenance_date: datetime) -> None:
-        """Установить дату последнего обслуживания."""
-        try:
-            # Загружаем текущие данные
-            stored_data = await self.store.async_load()
-            if stored_data is None:
-                stored_data = {}
+    def _fire_transition(self, schedule: Schedule) -> None:
+        payload: dict[str, Any] = {
+            "entity_id": self.status_entity_id,
+            "component_name": self.name_,
+        }
+        if schedule.status == STATUS_DUE:
+            self.hass.bus.async_fire(EVENT_DUE, {**payload, "days_until": schedule.days_until})
+        elif schedule.status == STATUS_OVERDUE:
+            self.hass.bus.async_fire(EVENT_OVERDUE, {**payload, "days_overdue": abs(schedule.days_until)})
 
-            # Обновляем дату последнего обслуживания
-            stored_data["last_maintenance_date"] = maintenance_date.isoformat()
-            
-            # Сохраняем
-            await self.store.async_save(stored_data)
-            
-            # Обновляем данные
-            await self.async_request_refresh()
-            
-            component_name = stored_data.get("name", "Компонент")
-            _LOGGER.info("Дата последнего обслуживания установлена для %s: %s", 
-                        component_name, maintenance_date.date())
+    # --- Repairs -------------------------------------------------------------
 
-        except Exception as err:
-            _LOGGER.error("Ошибка при установке даты обслуживания: %s", err)
-            raise 
+    @property
+    def issue_id(self) -> str:
+        return self.entry.entry_id
+
+    def _sync_issue(self, schedule: Schedule) -> None:
+        wanted = self.entry.options.get(CONF_REPAIRS, True) and schedule.status in (
+            STATUS_DUE,
+            STATUS_OVERDUE,
+        )
+        if not wanted:
+            ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
+            return
+        overdue = schedule.status == STATUS_OVERDUE
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self.issue_id,
+            is_fixable=True,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR if overdue else ir.IssueSeverity.WARNING,
+            translation_key="maintenance_overdue" if overdue else "maintenance_due",
+            translation_placeholders={
+                "name": self.name_,
+                "days": str(abs(schedule.days_until)),
+                "date": dt_util.as_local(schedule.next).date().isoformat(),
+            },
+            data={"entry_id": self.entry.entry_id},
+        )
+
+    def async_remove_issue(self) -> None:
+        ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
+
+    # --- actions ---------------------------------------------------------------
+
+    def async_refresh_schedule(self) -> None:
+        """Called at local midnight."""
+        self._recompute()
+
+    async def async_set_last_maintenance(self, when: dt.date | dt.datetime | None = None) -> None:
+        """Record a maintenance: now, a given date (local midnight) or datetime."""
+        if when is None:
+            moment = dt_util.now()
+        elif isinstance(when, dt.datetime):
+            moment = when if when.tzinfo else when.replace(tzinfo=dt_util.get_default_time_zone())
+        else:
+            moment = dt_util.start_of_local_day(when)
+        self._stored["last_maintenance_date"] = moment.isoformat()
+        await self._save()
+        self.hass.bus.async_fire(
+            EVENT_COMPLETED,
+            {
+                "entity_id": self.status_entity_id,
+                "component_name": self.name_,
+                "maintenance_date": self._stored["last_maintenance_date"],
+            },
+        )
+        self._recompute()
+
+    async def _async_update_data(self) -> Schedule:  # pragma: no cover - never polled
+        return self.data

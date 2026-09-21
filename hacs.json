@@ -1,5 +1,6 @@
 {
-    "name": "Maintainable",
-    "hacs": "1.6.0",
-    "homeassistant": "2023.1.0"
-} 
+  "name": "Maintainable",
+  "content_in_root": false,
+  "render_readme": true,
+  "homeassistant": "2026.2.0"
+}

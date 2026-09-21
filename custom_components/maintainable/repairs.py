@@ -52,5 +52,9 @@ class MaintenanceDoneFlow(RepairsFlow):
                     ): DateSelector()
                 }
             ),
-            description_placeholders={"name": entry.data.get(CONF_NAME, entry.title)},
+            description_placeholders={
+                "name": entry.data.get(CONF_NAME, entry.title),
+                "days": str(abs(entry.runtime_data.data.days_until)),
+                "date": dt_util.as_local(entry.runtime_data.data.next).date().isoformat(),
+            },
         )

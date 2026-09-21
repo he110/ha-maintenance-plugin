@@ -69,7 +69,7 @@
         "step": {
           "confirm": {
             "title": "Record the maintenance",
-            "description": "When was **{name}** serviced? The next date will be counted from it.",
+            "description": "**{name}** needs maintenance in {days} day(s), on {date}.\n\nDone already? Pick the date it was done — the next period starts from it.",
             "data": {
               "maintenance_date": "Date"
             }
@@ -78,8 +78,7 @@
         "abort": {
           "not_loaded": "The component is not loaded. Enable it and try again."
         }
-      },
-      "description": "**{name}** needs maintenance in {days} day(s), on {date}.\n\nDone already? Use **Fix** to record it."
+      }
     },
     "maintenance_overdue": {
       "title": "{name}: maintenance overdue",
@@ -87,7 +86,7 @@
         "step": {
           "confirm": {
             "title": "Record the maintenance",
-            "description": "When was **{name}** serviced? The next date will be counted from it.",
+            "description": "**{name}** was due for maintenance on {date} — {days} day(s) ago.\n\nDone already? Pick the date it was done — the next period starts from it.",
             "data": {
               "maintenance_date": "Date"
             }
@@ -96,8 +95,7 @@
         "abort": {
           "not_loaded": "The component is not loaded. Enable it and try again."
         }
-      },
-      "description": "**{name}** was due for maintenance on {date} — {days} day(s) ago.\n\nDone already? Use **Fix** to record it."
+      }
     }
   },
   "exceptions": {

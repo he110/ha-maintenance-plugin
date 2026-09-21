@@ -170,7 +170,12 @@ async def test_fix_flow_records_the_date(hass: HomeAssistant, hass_storage, brea
     flow = await manager.async_init(DOMAIN, data={"issue_id": ENTRY_ID})
     assert flow["type"] is FlowResultType.FORM
     assert flow["step_id"] == "confirm"
-    assert flow["description_placeholders"]["name"] == NAME
+    # Everything the step description needs is filled in, on any HA version.
+    assert {k: flow["description_placeholders"][k] for k in ("name", "days", "date")} == {
+        "name": NAME,
+        "days": "83",
+        "date": "2026-06-30",
+    }
     result = await manager.async_configure(flow["flow_id"], {"maintenance_date": "2026-09-19"})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()

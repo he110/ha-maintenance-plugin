@@ -374,3 +374,50 @@ async def test_transition_while_ha_was_off_fires_once(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert len(overdue) == 1  # not again
+
+
+async def test_split_composite_device_is_repaired(hass: HomeAssistant, hass_storage) -> None:
+    """HA 2026.8 split devices that 1.x had joined: entities go back to the real device.
+
+    1.x added its config entry to the linked device; the registry migration split that
+    composite device into the owner's device and a Maintainable-owned copy (shown as a
+    "related device"), and the stored device_id still holds the composite id.
+    """
+    import attr
+
+    registry = dr.async_get(hass)
+    if not hasattr(dr.DeviceEntry, "__attrs_attrs__") or "composite_device_id" not in {
+        a.name for a in attr.fields(dr.DeviceEntry)
+    }:
+        pytest.skip("Composite device splits exist since Home Assistant 2026.8")
+
+    composite_id = "c0mp0s1te0000000000000000000000a"
+    owner = MockConfigEntry(domain="device_tools", title="Device Tools")
+    owner.add_to_hass(hass)
+    real = registry.async_get_or_create(
+        config_entry_id=owner.entry_id, identifiers={("device_tools", "aquaphor")}, name="Фильтр Аквафор"
+    )
+    entry = legacy_entry(hass, hass_storage, None, "2026-08-06T19:36:18.481098")
+    # The entry still stores the pre-split composite id.
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "device_id": composite_id})
+    copy = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("device_tools", "aquaphor-copy")}, name="Фильтр Аквафор"
+    )
+    # What the registry migration leaves behind (not reachable through public API).
+    for device in (real, copy):
+        registry._devices[device.id] = attr.evolve(device, composite_device_id=composite_id)
+    entities = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(entities, entry.entry_id):
+        entities.async_update_entity(entity.entity_id, device_id=copy.id)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Back on the real device, with history-bearing entity ids unchanged…
+    for entity in er.async_entries_for_config_entry(entities, entry.entry_id):
+        assert entity.device_id == real.id, entity.entity_id
+    assert hass.states.get(f"sensor.{SLUG}_m_status") is not None
+    # …the leftover copy is gone, and the entry points at the real device.
+    assert registry.async_get(copy.id) is None
+    assert entry.data["device_id"] == real.id
+    assert entry.state is ConfigEntryState.LOADED

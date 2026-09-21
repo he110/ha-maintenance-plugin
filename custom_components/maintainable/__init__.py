@@ -21,6 +21,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .coordinator import MaintainableConfigEntry, MaintenanceCoordinator
+from .devices import async_relink
 from .services import async_register_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +60,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: MaintainableConfigEntr
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MaintainableConfigEntry) -> bool:
+    # Before the update listener exists: fixing the stored device id must not reload.
+    async_relink(hass, entry)
     coordinator = MaintenanceCoordinator(hass, entry)
     await coordinator.async_load()
     entry.runtime_data = coordinator

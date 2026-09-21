@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import CONF_DEVICE_ID, DOMAIN
 from .coordinator import MaintenanceCoordinator
+from .devices import resolve_linked_device
 
 # Entity names are "<component> - <suffix>", exactly as in 1.x (has_entity_name=False),
 # so friendly names do not change on upgrade. A component linked to someone else's
@@ -47,7 +47,7 @@ class MaintainableEntity(CoordinatorEntity[MaintenanceCoordinator]):
         self.entity_id = f"{platform}.{slugify(name)}{object_suffix}"
 
         device_id = entry.data.get(CONF_DEVICE_ID)
-        if device_id and (device := dr.async_get(hass).async_get(device_id)):
+        if device_id and (device := resolve_linked_device(hass, entry)):
             # Attach to the chosen device of another integration the supported way
             # (DeviceInfo with a foreign device's identifiers is deprecated).
             self.device_entry = device

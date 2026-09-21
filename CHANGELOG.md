@@ -45,5 +45,3 @@ instead of `180.0`) — the same value for templates and comparisons.
 
 The config entry is migrated from 1.1 to 1.2 (settings are copied to options; entry data is
 left untouched), so going back to 1.4.0 remains possible.
-
-The integration type is now *helper* (it was *device*): it is listed among helpers.

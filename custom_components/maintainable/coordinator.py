@@ -76,6 +76,16 @@ class MaintenanceCoordinator(DataUpdateCoordinator[Schedule]):
         await self._store.async_save(self._stored)
 
     @property
+    def last_iso(self) -> str:
+        """The stored string as is — 1.x attributes showed it verbatim."""
+        return self._stored["last_maintenance_date"]
+
+    def next_iso(self, schedule: Schedule) -> str:
+        """Next date in the same style as the stored one (1.x wrote naive local times)."""
+        naive = dt.datetime.fromisoformat(self.last_iso).tzinfo is None
+        return (schedule.next.replace(tzinfo=None) if naive else schedule.next).isoformat()
+
+    @property
     def last_maintenance(self) -> dt.datetime:
         return parse_stored(self._stored["last_maintenance_date"], dt_util.get_default_time_zone())
 

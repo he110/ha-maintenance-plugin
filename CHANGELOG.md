@@ -40,6 +40,9 @@ Nothing to do. Kept exactly as they were: entity IDs and unique IDs, states (`ok
 `overdue`, days), attributes (including `status` on the days sensor), friendly names,
 services and their fields, events and their data, stored maintenance dates.
 
+One visible nuance: the `maintenance_interval` attribute is now a whole number (`180`
+instead of `180.0`) — the same value for templates and comparisons.
+
 The config entry is migrated from 1.1 to 1.2 (settings are copied to options; entry data is
 left untouched), so going back to 1.4.0 remains possible.
 

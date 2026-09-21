@@ -38,8 +38,8 @@ def _attributes(coordinator: MaintenanceCoordinator) -> dict[str, Any]:
     return {
         "status": schedule.status,
         "days_until_maintenance": schedule.days_until,
-        "last_maintenance_date": schedule.last.isoformat(),
-        "next_maintenance_date": schedule.next.isoformat(),
+        "last_maintenance_date": coordinator.last_iso,
+        "next_maintenance_date": coordinator.next_iso(schedule),
         "maintenance_interval": effective_interval(coordinator.entry),
         "component_name": coordinator.name_,
     }

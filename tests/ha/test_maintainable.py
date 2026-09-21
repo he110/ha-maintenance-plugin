@@ -105,6 +105,9 @@ async def test_upgrade_from_1_4_keeps_everything(hass: HomeAssistant, hass_stora
     assert days.attributes["unit_of_measurement"] == "d"
     assert status.attributes["maintenance_interval"] == 180
     assert status.attributes["component_name"] == NAME
+    # Date attributes byte-for-byte as 1.x rendered them (naive local strings).
+    assert status.attributes["last_maintenance_date"] == "2026-03-25T19:42:00"
+    assert days.attributes["next_maintenance_date"] == "2026-09-21T19:42:00"
     # Friendly name unchanged. HA 2026.9 prefixes the device name for entities on a device —
     # already the case with 1.4.0 ("Бризер: Кухня HEPA-фильтр… - Статус обслуживания").
     assert status.name.endswith(f"{NAME} - Статус обслуживания")

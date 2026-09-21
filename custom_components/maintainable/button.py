@@ -44,5 +44,5 @@ class MaintenanceButton(MaintainableEntity, ButtonEntity):
             "component_name": self.coordinator.name_,
             "current_status": schedule.status,
             "days_until_maintenance": schedule.days_until,
-            "last_maintenance_date": schedule.last.isoformat(),
+            "last_maintenance_date": self.coordinator.last_iso,
         }
